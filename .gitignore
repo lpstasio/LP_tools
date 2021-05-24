@@ -1,2 +1,8 @@
 out/
 in/
+build/
+dist/
+*.swp
+*.pyc
+*.cpython
+*.spec

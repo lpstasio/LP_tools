@@ -99,10 +99,15 @@ M30
 
 if __name__ == '__main__':
 	paths = glob.glob('in/*.nc')
+	if not os.path.exists('out'):
+	    os.makedirs('out')
+
 	for path in paths:
 		filename = os.path.basename(path)
 		if 'numeri' in path:
 			process(filename, numeri_start, numeri_end, 'NUMERI')
 		else:
 			process(filename, base_start, base_end, 'BASE')
+	
+	input("\n\nPremere invio per uscire...")
 
