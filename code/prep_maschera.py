@@ -109,5 +109,5 @@ if __name__ == '__main__':
 		else:
 			process(filename, base_start, base_end, 'BASE')
 	
-	input("\n\nPremere invio per uscire...")
+	input("\n\nPremere invio per chiudere...")
 
