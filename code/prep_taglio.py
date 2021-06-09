@@ -15,28 +15,28 @@ info_text = '''
 ;
 '''[1:]
 
-start = '''
+start_text = '''
 ;
-M24S19000                     <---- n motore
+M2__NMOTORE__ S19000
 ;
 G79 G0 Z0
 G90 G0 Y-100
 ;
-(UIO,X,Y,Z)                   <---- dima
+(UIO,X,Y,Z)
 ;
-G90 G0 X Y B A                <---- primo g0 programma
+G90 G0 __X__ __Y__ __B__ __A__
 ;
 L365=0
-L385=35.00 ; L. ut. Libera
-L386=4 ; Numero Motore        <---- n motore
+L385=__LUTENSILE__ ; L. ut. Libera
+L386=__NMOTORE__ ; Numero Motore
 ;
 (TCP,1)
 ;
-N17 G90 G0 X Y                <---- primo g0 programma
+G90 G0 __X__ __Y__
 ;
 '''[1:]
 
-end = '''
+end_text = '''
 ;
 (TCP)
 ;
@@ -57,7 +57,19 @@ def process(name):
 	print("opening ", name)
 	info_inserted = False
 	is_writing = True
+	tcp1_found = False
+	g0_found   = False
 
+	current_mot = ''
+	current_len = ''
+
+	re_g0_coordinate_x = re.compile('X-?[0-9]+.?[0-9]*')
+	re_g0_coordinate_y = re.compile('Y-?[0-9]+.?[0-9]*')
+	re_g0_coordinate_z = re.compile('Z-?[0-9]+.?[0-9]*')
+	re_g0_coordinate_a = re.compile('A-?[0-9]+.?[0-9]*')
+	re_g0_coordinate_b = re.compile('B-?[0-9]+.?[0-9]*')
+	re_l385			   = re.compile('=[0-9]+.?[0-9]*')
+	re_l386 		   = re.compile('=[0-9]+')
 
 	# Preparazione info
 	utensili_text = ''
@@ -86,6 +98,37 @@ def process(name):
 									   replace('__PROGRAMMATORE__', nome_programmatore))
 							info_inserted = True
 							is_writing = True
+					else:  # info_inserted == True
+						if not tcp1_found:
+							if not 'DIS' in line:
+								is_writing = False
+							if not is_writing:
+								if 'L385' in line:
+									current_len = re_l385.findall(line)[0][1:]
+								elif 'L386' in line:
+									current_mot = re_l386.findall(line)[0][1:]
+								elif '(TCP' in line:
+									tcp1_found = True
+						else:  # tcp1_found == True
+							if (not g0_found) and ('G0' in line):
+								print(line)
+								x = re_g0_coordinate_x.findall(line)[0]
+								y = re_g0_coordinate_y.findall(line)[0]
+								z = re_g0_coordinate_z.findall(line)[0]
+								a = re_g0_coordinate_a.findall(line)[0]
+								b = re_g0_coordinate_b.findall(line)[0]
+
+								fout.write(start_text.\
+											replace('__NMOTORE__',   current_mot).\
+											replace('__LUTENSILE__', current_len).\
+											replace('__X__', x).\
+											replace('__Y__', y).\
+											replace('__Z__', z).\
+											replace('__A__', a).\
+											replace('__B__', b))
+								line = ''
+								g0_found = True
+								is_writing = True
 
 					if is_writing:	
 						fout.write(line)
