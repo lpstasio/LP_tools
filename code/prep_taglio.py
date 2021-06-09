@@ -4,7 +4,7 @@ import os
 
 nome_programma     = 'PRTEST00'
 nome_programmatore = 'DAVIDE'
-utensili           = [['2', 'F6', '35']]
+utensili           = [['2', 'F6', '35'], ['3', 'D40', '40']]
 dima               = '6A'
 n_robot            = '8'
 
@@ -56,6 +56,7 @@ M5
 def process(name):
 	print("opening ", name)
 	info_inserted = False
+	is_writing = True
 
 
 	# Preparazione info
@@ -73,15 +74,21 @@ def process(name):
 		if should_overwrite:
 			with open('out/' + name, 'w') as fout:
 				for line in fin.readlines():
-					if (not info_inserted) and ('DIS' in line):       # Info iniziale
-						fout.write(info_text.\
-								   replace('__NOMEPR__', nome_programma).\
-								   replace('__UTENSILI__', utensili_text).\
-								   replace('__DIMA__', dima).\
-								   replace('__NROBOT__', n_robot).\
-								   replace('__PROGRAMMATORE__', nome_programmatore))
-						info_inserted = True
-					fout.write(line)
+					if not info_inserted:
+						if '(TCP)' in line:
+							is_writing = False
+						if 'DIS' in line:       # Info iniziale
+							fout.write(info_text.\
+									   replace('__NOMEPR__', nome_programma).\
+									   replace('__UTENSILI__', utensili_text).\
+									   replace('__DIMA__', dima).\
+									   replace('__NROBOT__', n_robot).\
+									   replace('__PROGRAMMATORE__', nome_programmatore))
+							info_inserted = True
+							is_writing = True
+
+					if is_writing:	
+						fout.write(line)
 
 if __name__ == '__main__':
 	paths = glob.glob('in/*.nc')
