@@ -12,46 +12,51 @@ def process(name, start, end, type):
 	z_expr = re.compile('[zZ][-]*[0-9\.]*')
 	z_list = dict()
 	with open('in/' + name,'r') as fin:
-		with open('out/' + name, 'w') as fout:
-			for line in fin.readlines():
-				skip_z_guard = False
-				if not has_ended:
-					if not pause:
-						if (not has_started) and ('N2;OPERAZIONE' in line):
-							pause = True
-							line = start
-							skip_z_guard = True
-						else:
-							if has_started:
-								if not once:
-									line = line.replace('B180.000A0.000','F15000')
-									once = True
-								elif '(DIS,"FINE PROGRAMMA")' in line:
-									line = end
-									has_ended = True
-									skip_z_guard = True
-							line = line.replace('Z25','Z40F15000').replace('F2000','F3500')
-						fout.write(line)
-						
-						# Z guards
-						if not skip_z_guard:
-							for match in z_expr.findall(line):
-								if match in z_list.keys():
-									z_list[match] += 1
-								else:
-									z_list[match] = 1
-					elif '(TCP,1)' in line:
-						pause = False
-						has_started = True
+		should_overwrite = True
+		if os.path.exists('out/' + name):
+			choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
+			should_overwrite = choice[0].lower() == 's'
+		if should_overwrite:
+			with open('out/' + name, 'w') as fout:
+				for line in fin.readlines():
+					skip_z_guard = False
+					if not has_ended:
+						if not pause:
+							if (not has_started) and ('N2;OPERAZIONE' in line):
+								pause = True
+								line = start
+								skip_z_guard = True
+							else:
+								if has_started:
+									if not once:
+										line = line.replace('B180.000A0.000','F15000')
+										once = True
+									elif '(DIS,"FINE PROGRAMMA")' in line:
+										line = end
+										has_ended = True
+										skip_z_guard = True
+								line = line.replace('Z25','Z40F15000').replace('F2000','F3500')
+							fout.write(line)
+							
+							# Z guards
+							if not skip_z_guard:
+								for match in z_expr.findall(line):
+									if match in z_list.keys():
+										z_list[match] += 1
+									else:
+										z_list[match] = 1
+						elif '(TCP,1)' in line:
+							pause = False
+							has_started = True
 	
-	print('\n' + name + '  (' + type + '): ')
-	max_len = 0
-	for zstr in z_list.keys():
-		if len(zstr) > max_len:
-			max_len = len(zstr)
-	for zstr in z_list.keys():
-		spacing = ' '*(max_len - len(zstr))
-		print(zstr + spacing, '->', z_list[zstr])
+			print('\n' + name + '  (' + type + '): ')
+			max_len = 0
+			for zstr in z_list.keys():
+				if len(zstr) > max_len:
+					max_len = len(zstr)
+			for zstr in z_list.keys():
+				spacing = ' '*(max_len - len(zstr))
+				print(zstr + spacing, '->', z_list[zstr])
 
 base_start = '''(DAN)
 G16XY
