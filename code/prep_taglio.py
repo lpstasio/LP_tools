@@ -4,7 +4,6 @@ import os
 
 nome_programma     = 'PRTEST00'
 nome_programmatore = 'DAVIDE'
-utensili           = [['2', 'F6', '35'], ['3', 'D40', '40']]
 dima               = '6A'
 n_robot            = '8'
 
@@ -61,22 +60,19 @@ def process(name):
 	tcp0_found = False
 	g0_found   = False
 
+	utensili    = []
+	n_utensili  = 0
 	current_mot = ''
 	current_len = ''
 
-	re_g0_coordinate_x = re.compile('X-?[0-9]+.?[0-9]*')
-	re_g0_coordinate_y = re.compile('Y-?[0-9]+.?[0-9]*')
-	re_g0_coordinate_z = re.compile('Z-?[0-9]+.?[0-9]*')
-	re_g0_coordinate_a = re.compile('A-?[0-9]+.?[0-9]*')
-	re_g0_coordinate_b = re.compile('B-?[0-9]+.?[0-9]*')
-	re_l385			   = re.compile('=[0-9]+.?[0-9]*')
+	re_g0_coordinate_x = re.compile('X-?[0-9]+\.?[0-9]*')
+	re_g0_coordinate_y = re.compile('Y-?[0-9]+\.?[0-9]*')
+	re_g0_coordinate_z = re.compile('Z-?[0-9]+\.?[0-9]*')
+	re_g0_coordinate_a = re.compile('A-?[0-9]+\.?[0-9]*')
+	re_g0_coordinate_b = re.compile('B-?[0-9]+\.?[0-9]*')
+	re_l385			   = re.compile('=[0-9]+\.?[0-9]*')
 	re_l386 		   = re.compile('=[0-9]+')
-
-	# Preparazione info
-	utensili_text = ''
-	for ut in utensili:
-		utensili_text += 'M{} {} L{} - '.format(ut[0], ut[1], ut[2])
-	utensili_text = utensili_text[:-3]
+	re_dis             = re.compile('DIS,".*"')
 
 	with open('in/' + name,'r') as fin:
 		should_overwrite = True
@@ -86,7 +82,34 @@ def process(name):
 			should_overwrite = True
 		if should_overwrite:
 			with open('out/' + name, 'w') as fout:
-				for line in fin.readlines():
+				# ricerca utensili
+				fin_content = fin.read()
+				for match in re_dis.findall(fin_content):
+					if 'FRESA' in match:
+						utensili.append([None, None, None])
+						if 'CILINDRICA' in match:  # FRESA
+							f_start = match.find('D=') + 2
+							f_end   = match.find('.',f_start)
+							utensili[n_utensili][1] = 'F' + match[f_start:f_end]
+						elif 'SFERICA' in match:   # DISCO
+							d_start = match.find('D=') + 2
+							d_end   = match.find('.',d_start)
+							utensili[n_utensili][1] = 'D' + match[d_start:d_end]
+					elif 'MOTORE' in match:
+						if utensili[n_utensili][0]:
+							__ERROR_ALREADY_POPUPATED_()
+						index = match.find('MOTORE') + 7
+						utensili[n_utensili][0] = match[index:index+1]
+						n_utensili += 1
+
+				# Preparazione info
+				utensili_text = ''
+				for ut in utensili:
+					utensili_text += 'M{} {} L{} - '.format(ut[0], ut[1], ut[2])
+				utensili_text = utensili_text[:-3]
+
+				for line in fin_content.split('\n'):
+					line += '\n'
 					if not info_inserted:
 						if '(TCP)' in line:
 							is_writing = False
