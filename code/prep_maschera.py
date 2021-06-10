@@ -9,6 +9,7 @@ def process(name, start, end, type):
 	once = False
 
 	skip_z_guard = False
+	is_15mm = (('15mm' in name) or ('15 mm' in name)) and (type == 'NUMERI')
 	z_expr = re.compile('[zZ][-]*[0-9\.]*')
 	z_list = dict()
 	with open('in/' + name,'r') as fin:
@@ -36,6 +37,8 @@ def process(name, start, end, type):
 										has_ended = True
 										skip_z_guard = True
 								line = line.replace('Z25','Z40F15000').replace('F2000','F3500')
+							if is_15mm:
+								line = line.replace('Z-5', 'Z-15')
 							fout.write(line)
 							
 							# Z guards
@@ -49,7 +52,10 @@ def process(name, start, end, type):
 							pause = False
 							has_started = True
 	
-			print('\n' + name + '  (' + type + '): ')
+			if is_15mm:
+				print('\n' + name + '  (' + type + ' 15mm): ')
+			else:
+				print('\n' + name + '  (' + type + '): ')
 			max_len = 0
 			for zstr in z_list.keys():
 				if len(zstr) > max_len:
@@ -109,10 +115,11 @@ if __name__ == '__main__':
 
 	for path in paths:
 		filename = os.path.basename(path)
-		if 'numeri' in path:
-			process(filename, numeri_start, numeri_end, 'NUMERI')
-		else:
-			process(filename, base_start, base_end, 'BASE')
+		if 'maschera' in filename:
+			if 'numeri' in path:
+				process(filename, numeri_start, numeri_end, 'NUMERI')
+			else:
+				process(filename, base_start, base_end, 'BASE')
 	
 	input("\n\nPremere invio per chiudere...")
 
