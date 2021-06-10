@@ -58,6 +58,7 @@ def process(name):
 	info_inserted = False
 	is_writing = True
 	tcp1_found = False
+	tcp0_found = False
 	g0_found   = False
 
 	current_mot = ''
@@ -98,18 +99,23 @@ def process(name):
 									   replace('__PROGRAMMATORE__', nome_programmatore))
 							info_inserted = True
 							is_writing = True
+							tcp0_found = True
 					else:  # info_inserted == True
-						if not tcp1_found:
-							if not 'DIS' in line:
+						if tcp0_found and (not tcp1_found):
+							if 'DIS' in line:
+								is_writing = True
+							else:
 								is_writing = False
-							if not is_writing:
-								if 'L385' in line:
-									current_len = re_l385.findall(line)[0][1:]
-								elif 'L386' in line:
-									current_mot = re_l386.findall(line)[0][1:]
-								elif '(TCP' in line:
-									tcp1_found = True
-						else:  # tcp1_found == True
+
+							if 'L385' in line:
+								# TODO: use this for info_text
+								current_len = re_l385.findall(line)[0][1:]
+							elif 'L386' in line:
+								current_mot = re_l386.findall(line)[0][1:]
+							elif '(TCP' in line:
+								tcp1_found = True
+								tcp0_found = False
+						elif tcp1_found:  # tcp1_found == True
 							if (not g0_found) and ('G0' in line):
 								print(line)
 								x = re_g0_coordinate_x.findall(line)[0]
@@ -127,8 +133,14 @@ def process(name):
 											replace('__A__', a).\
 											replace('__B__', b))
 								line = ''
-								g0_found = True
 								is_writing = True
+								tcp1_found = False
+						else:   #tcp0_found == False and tcp1_found = False
+							if 'FINE PROGRAMMA' in line:
+								fout.write(end_text)
+								break
+							if '(TCP)' in line:
+								tcp0_found = True
 
 					if is_writing:	
 						fout.write(line)
