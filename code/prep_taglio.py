@@ -173,6 +173,7 @@ if __name__ == '__main__':
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
+	print("PREPARAZIONE TAGLIO (v1)")
 	for path in paths:
 		filename = os.path.basename(path)
 		if not ('maschera' in filename):
