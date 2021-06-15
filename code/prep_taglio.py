@@ -63,7 +63,6 @@ M5
 '''[1:]
 
 def process(name):
-	print("opening ", name)
 	info_inserted = False
 	is_writing = True
 	tcp1_found = False
@@ -103,7 +102,6 @@ def process(name):
 						utensile = 'D'
 					ut_start = line.find('D=') + 2
 					ut_end   = line.find('.', ut_start)
-					print(ut_start,ut_end)
 					utensile += line[ut_start:ut_end]
 
 					l385_index = fin_content.find('L385=',match_index) + 5
@@ -127,7 +125,9 @@ def process(name):
 					if motori[i] != None:
 						utensili_text += 'M{} {} L{} - '.format(i+2, motori[i][0], motori[i][1])
 				utensili_text = utensili_text[:-3]
-				print(motori)
+
+				print(name, ' (' + utensili_text + ')')
+
 
 				for line in fin_content.split('\n'):
 					line += '\n'
@@ -161,7 +161,7 @@ def process(name):
 								tcp0_found = False
 						elif tcp1_found:  # tcp1_found == True
 							if (not g0_found) and ('G0' in line):
-								print(line)
+								#print(line)
 								x = re_g0_coordinate_x.findall(line)[0]
 								y = re_g0_coordinate_y.findall(line)[0]
 								z = re_g0_coordinate_z.findall(line)[0]
@@ -194,7 +194,7 @@ if __name__ == '__main__':
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
-	print("PREPARAZIONE TAGLIO (v1)")
+	print("PREPARAZIONE TAGLIO (v1)\n\n")
 	for path in paths:
 		filename = os.path.basename(path)
 		if not ('maschera' in filename):
