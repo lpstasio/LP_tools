@@ -10,7 +10,7 @@ def process(name, start, end, type):
 
 	skip_z_guard = False
 	is_15mm = (('15mm' in name) or ('15 mm' in name)) and (type == 'NUMERI')
-	z_expr = re.compile('[zZ][-]*[0-9\.]*')
+	z_expr = re.compile('[zZ][-]*[0-9]*\.*')
 	z_list = dict()
 	with open('in/' + name,'r') as fin:
 		should_overwrite = True
@@ -113,7 +113,7 @@ if __name__ == '__main__':
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
-	print("PREPARAZIONE TAGLIO MASCHERE (v1)")
+	print("PREPARAZIONE TAGLIO MASCHERE (v2)")
 	for path in paths:
 		filename = os.path.basename(path)
 		if 'maschera' in filename:
