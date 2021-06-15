@@ -2,10 +2,20 @@ import re
 import glob
 import os
 
-nome_programma     = 'PRTEST00'
-nome_programmatore = 'DAVIDE'
-dima               = '6A'
-n_robot            = '8'
+nome_programma     = 'NOME_PROGRAMMA'
+nome_programmatore = ''
+dima               = 'XX'
+n_robot            = 'X'
+
+MOTORE_UTENSILE  = 0
+MOTORE_LUNGHEZZA = 1
+
+info_text_blank = '''
+;
+;
+;
+;
+'''[1:]
 
 info_text = '''
 ;                        __NOMEPR__
@@ -60,8 +70,7 @@ def process(name):
 	tcp0_found = False
 	g0_found   = False
 
-	utensili    = []
-	n_utensili  = 0
+	motori      = [None, None, None]
 	current_mot = ''
 	current_len = ''
 
@@ -84,29 +93,41 @@ def process(name):
 			with open('out/' + name, 'w') as fout:
 				# ricerca utensili
 				fin_content = fin.read()
-				for match in re_dis.findall(fin_content):
-					if 'FRESA' in match:
-						utensili.append([None, None, None])
-						if 'CILINDRICA' in match:  # FRESA
-							f_start = match.find('D=') + 2
-							f_end   = match.find('.',f_start)
-							utensili[n_utensili][1] = 'F' + match[f_start:f_end]
-						elif 'SFERICA' in match:   # DISCO
-							d_start = match.find('D=') + 2
-							d_end   = match.find('.',d_start)
-							utensili[n_utensili][1] = 'D' + match[d_start:d_end]
-					elif 'MOTORE' in match:
-						if utensili[n_utensili][0]:
-							__ERROR_ALREADY_POPUPATED_()
-						index = match.find('MOTORE') + 7
-						utensili[n_utensili][0] = match[index:index+1]
-						n_utensili += 1
+				match_index = fin_content.find('FRESA')
+				utensile = ''
+				while (match_index > 0):
+					line = fin_content[match_index:].split('\n')[0]
+					if 'CILINDRICA' in line:  # FRESA
+						utensile = 'F'
+					elif 'SFERICA' in line:   # DISCO
+						utensile = 'D'
+					ut_start = line.find('D=') + 2
+					ut_end   = line.find('.', ut_start)
+					print(ut_start,ut_end)
+					utensile += line[ut_start:ut_end]
+
+					l385_index = fin_content.find('L385=',match_index) + 5
+					l386_index = fin_content.find('L386=',match_index) + 5
+					n_motore = int(fin_content[l386_index:l386_index+1]) - 2
+					len_ut   = fin_content[l385_index:l385_index+2]
+					if (n_motore < 0) or (n_motore > 2):
+						___ERRORE_N_MOTORE_NON_VALIDO
+					elif (motori[n_motore] != None) and ((motori[n_motore][MOTORE_UTENSILE][0] != utensile[0]) or (motori[n_motore][MOTORE_LUNGHEZZA] != len_ut)):
+						___ERRORE_N_MOTORE_DUPLICATO
+
+					motori[n_motore] = [None, None]
+					motori[n_motore][MOTORE_UTENSILE]  = utensile
+					motori[n_motore][MOTORE_LUNGHEZZA] = len_ut
+
+					match_index = fin_content.find('FRESA', l386_index)
 
 				# Preparazione info
 				utensili_text = ''
-				for ut in utensili:
-					utensili_text += 'M{} {} L{} - '.format(ut[0], ut[1], ut[2])
+				for i in range(3):
+					if motori[i] != None:
+						utensili_text += 'M{} {} L{} - '.format(i+2, motori[i][0], motori[i][1])
 				utensili_text = utensili_text[:-3]
+				print(motori)
 
 				for line in fin_content.split('\n'):
 					line += '\n'
@@ -179,5 +200,5 @@ if __name__ == '__main__':
 		if not ('maschera' in filename):
 			process(filename)
 	
-	#input("\n\nPremere invio per chiudere...")
+	input("\n\nPremere invio per chiudere...")
 
