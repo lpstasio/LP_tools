@@ -85,9 +85,8 @@ def process(name):
 	with open('in/' + name,'r') as fin:
 		should_overwrite = True
 		if os.path.exists('out/' + name):
-			#choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
-			#should_overwrite = choice[0].lower() == 's'
-			should_overwrite = True
+			choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
+			should_overwrite = choice[0].lower() == 's'
 		if should_overwrite:
 			with open('out/' + name, 'w') as fout:
 				# ricerca utensili
