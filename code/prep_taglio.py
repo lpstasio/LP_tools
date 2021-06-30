@@ -2,6 +2,10 @@ import re
 import glob
 import os
 
+# CHANGELOG
+#   v2: '(UIO,X,Y,Z)' era precedente inserito ad ogni cambio di utensile, invece che solo in quello iniziale
+#       Aggiunto supporto per '(TCP)' e '(TCP,1)' senza cambio utensile
+
 nome_programma     = 'NOME_PROGRAMMA'
 nome_programmatore = ''
 dima               = 'XX'
@@ -66,12 +70,14 @@ M5
 '''[1:]
 
 def process(name):
-	info_inserted = False
-	is_writing = True
-	tcp1_found = False
-	tcp0_found = False
-	g0_found   = False
-	origin_inserted = False
+	info_inserted    = False
+	is_writing       = True
+	tcp1_found       = False
+	tcp0_found       = False
+	g0_found         = False
+	origin_inserted  = False
+	is_changing_tool = False
+	tcp_without_toolchange_buffer = ''
 
 	motori      = [None, None, None]
 	current_mot = ''
@@ -157,38 +163,46 @@ def process(name):
 							if 'L385' in line:
 								# TODO: use this for info_text
 								current_len = re_l385.findall(line)[0][1:]
+								is_changing_tool = True
 							elif 'L386' in line:
 								current_mot = re_l386.findall(line)[0][1:]
 							elif '(TCP' in line:
 								tcp1_found = True
 								tcp0_found = False
+
+								if not is_changing_tool:
+									fout.write(tcp_without_toolchange_buffer + line)
+
+							tcp_without_toolchange_buffer += line
 						elif tcp1_found:  # tcp1_found == True
-							if (not g0_found) and ('G0' in line):
-								#print(line)
-								x = re_g0_coordinate_x.findall(line)[0]
-								y = re_g0_coordinate_y.findall(line)[0]
-								z = re_g0_coordinate_z.findall(line)[0]
-								a = re_g0_coordinate_a.findall(line)[0]
-								b = re_g0_coordinate_b.findall(line)[0]
+							if is_changing_tool:
+								if (not g0_found) and ('G0' in line):
+									x = re_g0_coordinate_x.findall(line)[0]
+									y = re_g0_coordinate_y.findall(line)[0]
+									z = re_g0_coordinate_z.findall(line)[0]
+									a = re_g0_coordinate_a.findall(line)[0]
+									b = re_g0_coordinate_b.findall(line)[0]
 
-								if origin_inserted:
-									origin = ''
-								else:
-									origin = origin_text
-									origin_inserted = True
+									if origin_inserted:
+										origin = ''
+									else:
+										origin = origin_text
+										origin_inserted = True
 
-								fout.write(start_text.\
-											replace('__ORIGIN__',    origin).\
-											replace('__NMOTORE__',   current_mot).\
-											replace('__LUTENSILE__', current_len).\
-											replace('__X__', x).\
-											replace('__Y__', y).\
-											replace('__Z__', z).\
-											replace('__A__', a).\
-											replace('__B__', b))
-								line = ''
-								is_writing = True
-								tcp1_found = False
+									fout.write(start_text.\
+												replace('__ORIGIN__',    origin).\
+												replace('__NMOTORE__',   current_mot).\
+												replace('__LUTENSILE__', current_len).\
+												replace('__X__', x).\
+												replace('__Y__', y).\
+												replace('__Z__', z).\
+												replace('__A__', a).\
+												replace('__B__', b))
+									line = ''
+								is_changing_tool = False
+							is_writing = True
+							tcp1_found = False
+							tcp_without_toolchange_buffer = ''
 						else:   #tcp0_found == False and tcp1_found = False
 							if 'FINE PROGRAMMA' in line:
 								fout.write(end_text)
@@ -204,7 +218,7 @@ if __name__ == '__main__':
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
-	print("PREPARAZIONE TAGLIO (v1)\n\n")
+	print("PREPARAZIONE TAGLIO (v2)\n\n")
 	for path in paths:
 		filename = os.path.basename(path)
 		if not ('maschera' in filename.lower()):
