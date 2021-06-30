@@ -116,8 +116,8 @@ if __name__ == '__main__':
 	print("PREPARAZIONE TAGLIO MASCHERE (v2)")
 	for path in paths:
 		filename = os.path.basename(path)
-		if 'maschera' in filename:
-			if 'numeri' in path:
+		if 'maschera' in filename.lower():
+			if 'numeri' in filename.lower():
 				process(filename, numeri_start, numeri_end, 'NUMERI')
 			else:
 				process(filename, base_start, base_end, 'BASE')
