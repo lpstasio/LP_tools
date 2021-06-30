@@ -24,6 +24,11 @@ info_text = '''
 ;
 '''[1:]
 
+origin_text = '''
+(UIO,X,Y,Z)
+;
+'''[1:]
+
 start_text = '''
 ;
 M2__NMOTORE__ S19000
@@ -31,9 +36,7 @@ M2__NMOTORE__ S19000
 G79 G0 Z0
 G90 G0 Y-100
 ;
-(UIO,X,Y,Z)
-;
-G90 G0 __X__ __Y__ __B__ __A__
+__ORIGIN__G90 G0 __X__ __Y__ __B__ __A__
 ;
 L365=0
 L385=__LUTENSILE__ ; L. ut. Libera
@@ -68,6 +71,7 @@ def process(name):
 	tcp1_found = False
 	tcp0_found = False
 	g0_found   = False
+	origin_inserted = False
 
 	motori      = [None, None, None]
 	current_mot = ''
@@ -167,7 +171,14 @@ def process(name):
 								a = re_g0_coordinate_a.findall(line)[0]
 								b = re_g0_coordinate_b.findall(line)[0]
 
+								if origin_inserted:
+									origin = ''
+								else:
+									origin = origin_text
+									origin_inserted = True
+
 								fout.write(start_text.\
+											replace('__ORIGIN__',    origin).\
 											replace('__NMOTORE__',   current_mot).\
 											replace('__LUTENSILE__', current_len).\
 											replace('__X__', x).\
@@ -196,7 +207,7 @@ if __name__ == '__main__':
 	print("PREPARAZIONE TAGLIO (v1)\n\n")
 	for path in paths:
 		filename = os.path.basename(path)
-		if not ('maschera' in filename):
+		if not ('maschera' in filename.lower()):
 			process(filename)
 	
 	input("\n\nPremere invio per chiudere...")
