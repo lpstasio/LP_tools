@@ -29,6 +29,9 @@ info_text = '''
 '''[1:]
 
 origin_text = '''
+G79 G0 Z0
+G79 G0 Y-100
+;
 (UIO,X,Y,Z)
 ;
 '''[1:]
@@ -36,9 +39,6 @@ origin_text = '''
 start_text = '''
 ;
 M2__NMOTORE__ S19000
-;
-G79 G0 Z0
-G90 G0 Y-100
 ;
 __ORIGIN__G90 G0 __X__ __Y__ __B__ __A__
 ;
@@ -218,7 +218,7 @@ if __name__ == '__main__':
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
-	print("PREPARAZIONE TAGLIO (v2)\n\n")
+	print("PREPARAZIONE TAGLIO (v3)\n\n")
 	for path in paths:
 		filename = os.path.basename(path)
 		if not ('maschera' in filename.lower()):
