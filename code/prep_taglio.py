@@ -5,6 +5,9 @@ import os
 # CHANGELOG
 #   v2: '(UIO,X,Y,Z)' era precedente inserito ad ogni cambio di utensile, invece che solo in quello iniziale
 #       Aggiunto supporto per '(TCP)' e '(TCP,1)' senza cambio utensile
+#   v4: Riconosce 'R2'/'r2' e 'R9'/'r9' nel nome del file ed esporta le modifiche necessarie
+#       Riconosce qualsiasi estensione, non solo .nc
+#       Cambiato l'header
 
 nome_programma     = 'NOME_PROGRAMMA'
 nome_programmatore = ''
@@ -23,8 +26,8 @@ info_text_blank = '''
 
 info_text = '''
 ;                        __NOMEPR__
-;
-;  __UTENSILI__   DIMA __DIMA__      ROBOT __NROBOT__    __PROGRAMMATORE__
+;  <R__NROBOT__>  __DIMA__                   __PROGRAMMATORE__
+;                     __UTENSILI__
 ;
 '''[1:]
 
@@ -70,6 +73,8 @@ M5
 '''[1:]
 
 def process(name):
+	robot_number = 0
+
 	info_inserted    = False
 	is_writing       = True
 	tcp1_found       = False
@@ -91,6 +96,11 @@ def process(name):
 	re_l385			   = re.compile('=[0-9]+\.?[0-9]*')
 	re_l386 		   = re.compile('=[0-9]+')
 	re_dis             = re.compile('DIS,".*"')
+
+	if ('r2' in name.lower()):
+		robot_number = 2
+	elif ('r9' in name.lower()):
+		robot_number = 9
 
 	with open('in/' + name,'r') as fin:
 		should_overwrite = True
@@ -135,7 +145,10 @@ def process(name):
 						utensili_text += 'M{} {} L{} - '.format(i+2, motori[i][0], motori[i][1])
 				utensili_text = utensili_text[:-3]
 
-				print(name, ' (' + utensili_text + ')')
+				robot_text = ''
+				if (robot_number > 0):
+					robot_text = ' [R' + str(robot_number) + ']'
+				print(name, robot_text + ' (' + utensili_text + ')')
 
 
 				for line in fin_content.split('\n'):
@@ -212,17 +225,58 @@ def process(name):
 
 					if is_writing:	
 						fout.write(line)
+			if robot_number > 0:
+				os.rename('out/' + name, 'out/temp')
+				if robot_number == 2:
+					process_r2_r9(name, False)
+				elif robot_number == 9:
+					process_r2_r9(name, True)
+				os.remove('out/temp')
+
+def process_r2_r9(name, is_r9):
+	lines_from_tcp0 = -1
+	hold_buffer = ''
+	h0_inserted = False
+
+	with open('out/temp','r') as fin:
+		should_overwrite = True
+		if os.path.exists('out/' + name):
+			choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
+			should_overwrite = choice[0].lower() == 's'
+		if should_overwrite:
+			with open('out/' + name, 'w') as fout:
+				for line in fin.readlines():
+					if lines_from_tcp0 < 0:
+						if h0_inserted and is_r9 and ('X0' in line):
+							line = line.replace('X0', 'X2550')
+						fout.write(line)
+						if 'L386' in line:
+							fout.write('M141\n')
+						elif '(TCP)' in line:
+							lines_from_tcp0 = 1
+					elif lines_from_tcp0 == 1:
+						hold_buffer += line
+						lines_from_tcp0 = 2
+					elif lines_from_tcp0 == 2:
+						if '(UAO,0)' in line:
+							hold_buffer += 'h0\n;\n'
+							h0_inserted = True
+						line = hold_buffer + line
+						hold_buffer = ''
+						lines_from_tcp0 = -1
+						fout.write(line)
 
 if __name__ == '__main__':
-	paths = glob.glob('in/*.nc')
+	paths = glob.glob('in/*')
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
-	print("PREPARAZIONE TAGLIO (v3)\n\n")
+	print("PREPARAZIONE TAGLIO (v4)\n\n")
 	for path in paths:
-		filename = os.path.basename(path)
-		if not ('maschera' in filename.lower()):
-			process(filename)
+		if not os.path.isdir(path):
+			filename = os.path.basename(path)
+			if not ('maschera' in filename.lower()):
+				process(filename)
 	
 	input("\n\nPremere invio per chiudere...")
 
