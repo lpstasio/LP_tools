@@ -2,12 +2,15 @@ import re
 import glob
 import os
 
+VERSION_NUMBER = 5
+
 # CHANGELOG
 #   v2: '(UIO,X,Y,Z)' era precedente inserito ad ogni cambio di utensile, invece che solo in quello iniziale
 #       Aggiunto supporto per '(TCP)' e '(TCP,1)' senza cambio utensile
 #   v4: Riconosce 'R2'/'r2' e 'R9'/'r9' nel nome del file ed esporta le modifiche necessarie
 #       Riconosce qualsiasi estensione, non solo .nc
 #       Cambiato l'header
+#   v5: Riconosce 'INIZIO LINK' e 'FINE LINK' e lascia solo una riga tra i due; (se una Z viene trovata dopo un 'INIZIO LINK' e prima di un 'FINE LINK', esporta tutte le righe senza modifiche)
 #
 #
 # PLANNED:
@@ -15,7 +18,6 @@ import os
 #   R3, R4, R5, R6
 #   Posizioni dime
 #   Input nome?
-#   Ottimizzazione link
 #   Centratura utensili in header
 
 nome_programma     = 'NOME_PROGRAMMA'
@@ -92,6 +94,8 @@ def process(name):
 	origin_inserted  = False
 	is_changing_tool = False
 	tcp_without_toolchange_buffer = ''
+	is_linking       = False
+	link_buffer      = ''
 
 	motori      = [None, None, None]
 	current_mot = ''
@@ -226,14 +230,34 @@ def process(name):
 							tcp1_found = False
 							tcp_without_toolchange_buffer = ''
 						else:   #tcp0_found == False and tcp1_found = False
-							if 'FINE PROGRAMMA' in line:
-								fout.write(end_text)
-								break
-							if '(TCP)' in line:
-								tcp0_found = True
+							if is_linking:
+								if 'Z' in line:
+									is_linking = False
+									is_writing = True
+									line = link_buffer + line
+									link_buffer = ''
+								if 'FINE LINK' in line:
+									is_linking = False
+									is_writing = True
+									link_buffer = link_buffer.split('\n')
+									line = link_buffer[len(link_buffer) - 2] + '\n' + line
+									link_buffer = ''
+							else:
+								if 'INIZIO LINK' in line:
+									is_linking = True
+									is_writing = False
+									fout.write(line)
+								if 'FINE PROGRAMMA' in line:
+									fout.write(end_text)
+									break
+								if '(TCP)' in line:
+									tcp0_found = True
 
 					if is_writing:	
 						fout.write(line)
+					elif is_linking:
+						if not ('INIZIO LINK' in line):
+							link_buffer += line
 			if robot_number > 0:
 				os.rename('out/' + name, 'out/temp')
 				if robot_number == 2:
@@ -280,7 +304,7 @@ if __name__ == '__main__':
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
-	print("PREPARAZIONE TAGLIO (v4)\n\n")
+	print("PREPARAZIONE TAGLIO (v{})\n\n".format(VERSION_NUMBER))
 	for path in paths:
 		if not os.path.isdir(path):
 			filename = os.path.basename(path)
