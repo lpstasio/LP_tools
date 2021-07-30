@@ -8,6 +8,15 @@ import os
 #   v4: Riconosce 'R2'/'r2' e 'R9'/'r9' nel nome del file ed esporta le modifiche necessarie
 #       Riconosce qualsiasi estensione, non solo .nc
 #       Cambiato l'header
+#
+#
+# PLANNED:
+#   Data nell'header
+#   R3, R4, R5, R6
+#   Posizioni dime
+#   Input nome?
+#   Ottimizzazione link
+#   Centratura utensili in header
 
 nome_programma     = 'NOME_PROGRAMMA'
 nome_programmatore = ''
