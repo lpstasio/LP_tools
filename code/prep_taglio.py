@@ -19,6 +19,7 @@ VERSION_NUMBER = 5
 #   Posizioni dime
 #   Input nome?
 #   Centratura utensili in header
+#   Numerazione righe
 
 nome_programma     = 'NOME_PROGRAMMA'
 nome_programmatore = ''
