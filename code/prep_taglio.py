@@ -2,7 +2,7 @@ import re
 import glob
 import os
 
-VERSION_NUMBER = 5
+VERSION_NUMBER = 6
 
 # CHANGELOG
 #   v2: '(UIO,X,Y,Z)' era precedente inserito ad ogni cambio di utensile, invece che solo in quello iniziale
@@ -11,6 +11,7 @@ VERSION_NUMBER = 5
 #       Riconosce qualsiasi estensione, non solo .nc
 #       Cambiato l'header
 #   v5: Riconosce 'INIZIO LINK' e 'FINE LINK' e lascia solo una riga tra i due; (se una Z viene trovata dopo un 'INIZIO LINK' e prima di un 'FINE LINK', esporta tutte le righe senza modifiche)
+#   v6: Riconosce 'R3'/'r3' nel nome del file ed esporta le modifiche necessarie
 #
 #
 # PLANNED:
@@ -113,6 +114,8 @@ def process(name):
 
 	if ('r2' in name.lower()):
 		robot_number = 2
+	elif ('r3' in name.lower()):
+		robot_number = 3
 	elif ('r9' in name.lower()):
 		robot_number = 9
 
@@ -175,7 +178,7 @@ def process(name):
 									   replace('__NOMEPR__', nome_programma).\
 									   replace('__UTENSILI__', utensili_text).\
 									   replace('__DIMA__', dima).\
-									   replace('__NROBOT__', n_robot).\
+									   replace('__NROBOT__', str(robot_number) if robot_number > 0 else n_robot).\
 									   replace('__PROGRAMMATORE__', nome_programmatore))
 							info_inserted = True
 							is_writing = True
@@ -263,6 +266,8 @@ def process(name):
 				os.rename('out/' + name, 'out/temp')
 				if robot_number == 2:
 					process_r2_r9(name, False)
+				elif robot_number == 3:
+					process_r3(name)
 				elif robot_number == 9:
 					process_r2_r9(name, True)
 				os.remove('out/temp')
@@ -299,6 +304,34 @@ def process_r2_r9(name, is_r9):
 						hold_buffer = ''
 						lines_from_tcp0 = -1
 						fout.write(line)
+
+def process_r3(name):
+	uio_found = False
+	uao0_found = False
+
+	with open('out/temp','r') as fin:
+		should_overwrite = True
+		if os.path.exists('out/' + name):
+			choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
+			should_overwrite = choice[0].lower() == 's'
+		if should_overwrite:
+			with open('out/' + name, 'w') as fout:
+				for line in fin.readlines():
+					if not uio_found:
+						if 'UIO' in line:
+							uio_found = True
+						line = line.replace('G79 G0 Z0', 'G79 G0 Z200')
+						if 'G79 G0 Y-100' in line:
+							line = ''
+					elif uao0_found:
+						line = line.replace('G90 G0 Z0', 'G90 G0 Z200')
+						line = line.replace('A0 B0', 'G90 G0 Y310 A-90 B0')
+						line = line.replace('X0 Y0 Z0', 'X-1252 Y322 Z200 A-135 B0')
+						if 'G90 G0 Y-100' in line:
+							line = ''
+					elif '(UAO,0)' in line:
+						uao0_found = True
+					fout.write(line)
 
 if __name__ == '__main__':
 	paths = glob.glob('in/*')
