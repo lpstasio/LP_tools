@@ -2,7 +2,7 @@ import re
 import glob
 import os
 
-VERSION_NUMBER = 6
+VERSION_NUMBER = 7
 
 # CHANGELOG
 #   v2: '(UIO,X,Y,Z)' era precedente inserito ad ogni cambio di utensile, invece che solo in quello iniziale
@@ -12,11 +12,12 @@ VERSION_NUMBER = 6
 #       Cambiato l'header
 #   v5: Riconosce 'INIZIO LINK' e 'FINE LINK' e lascia solo una riga tra i due; (se una Z viene trovata dopo un 'INIZIO LINK' e prima di un 'FINE LINK', esporta tutte le righe senza modifiche)
 #   v6: Riconosce 'R3'/'r3' nel nome del file ed esporta le modifiche necessarie
+#   v7: Riconosce 'R6'/'r6' nel nome del file ed esporta le modifiche necessarie
 #
 #
 # PLANNED:
 #   Data nell'header
-#   R3, R4, R5, R6
+#   R4, R5
 #   Posizioni dime
 #   Input nome?
 #   Centratura utensili in header
@@ -25,7 +26,6 @@ VERSION_NUMBER = 6
 nome_programma     = 'NOME_PROGRAMMA'
 nome_programmatore = ''
 dima               = 'XX'
-n_robot            = 'X'
 
 MOTORE_UTENSILE  = 0
 MOTORE_LUNGHEZZA = 1
@@ -116,6 +116,8 @@ def process(name):
 		robot_number = 2
 	elif ('r3' in name.lower()):
 		robot_number = 3
+	elif ('r6' in name.lower()):
+		robot_number = 6
 	elif ('r9' in name.lower()):
 		robot_number = 9
 
@@ -178,7 +180,7 @@ def process(name):
 									   replace('__NOMEPR__', nome_programma).\
 									   replace('__UTENSILI__', utensili_text).\
 									   replace('__DIMA__', dima).\
-									   replace('__NROBOT__', str(robot_number) if robot_number > 0 else n_robot).\
+									   replace('__NROBOT__', str(robot_number).replace('0','X')).\
 									   replace('__PROGRAMMATORE__', nome_programmatore))
 							info_inserted = True
 							is_writing = True
@@ -268,9 +270,29 @@ def process(name):
 					process_r2_r9(name, False)
 				elif robot_number == 3:
 					process_r3(name)
+				elif robot_number == 6:
+					process_r6(name)
 				elif robot_number == 9:
 					process_r2_r9(name, True)
 				os.remove('out/temp')
+
+def process_r6(name):
+	uao0_inserted = False
+
+	with open('out/temp','r') as fin:
+		should_overwrite = True
+		if os.path.exists('out/' + name):
+			choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
+			should_overwrite = choice[0].lower() == 's'
+		if should_overwrite:
+			with open('out/' + name, 'w') as fout:
+				for line in fin.readlines():
+					if not uao0_inserted:
+						if '(UAO,0)' in line:
+							uao0_inserted = True
+					else:
+						line = line.replace('X0', 'X2550')
+					fout.write(line)
 
 def process_r2_r9(name, is_r9):
 	lines_from_tcp0 = -1
