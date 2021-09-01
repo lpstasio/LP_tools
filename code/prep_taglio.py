@@ -2,7 +2,7 @@ import re
 import glob
 import os
 
-VERSION_NUMBER = 7
+VERSION_NUMBER = 8
 
 # CHANGELOG
 #   v2: '(UIO,X,Y,Z)' era precedente inserito ad ogni cambio di utensile, invece che solo in quello iniziale
@@ -13,6 +13,8 @@ VERSION_NUMBER = 7
 #   v5: Riconosce 'INIZIO LINK' e 'FINE LINK' e lascia solo una riga tra i due; (se una Z viene trovata dopo un 'INIZIO LINK' e prima di un 'FINE LINK', esporta tutte le righe senza modifiche)
 #   v6: Riconosce 'R3'/'r3' nel nome del file ed esporta le modifiche necessarie
 #   v7: Riconosce 'R6'/'r6' nel nome del file ed esporta le modifiche necessarie
+#   v8: Aggiunte spaziature (dopo 'Nxx' e tra le coordinate)
+#       Fix: riconosce 'F2.5'
 #
 #
 # PLANNED:
@@ -111,6 +113,8 @@ def process(name):
 	re_l385			   = re.compile('=[0-9]+\.?[0-9]*')
 	re_l386 		   = re.compile('=[0-9]+')
 	re_dis             = re.compile('DIS,".*"')
+	re_n               = re.compile('N[0-9]+')
+	re_XYZAB           = re.compile('[0-9][XYZAB][0-9]+')
 
 	if ('r2' in name.lower()):
 		robot_number = 2
@@ -125,7 +129,7 @@ def process(name):
 		should_overwrite = True
 		if os.path.exists('out/' + name):
 			choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
-			should_overwrite = choice[0].lower() == 's'
+			should_overwrite = ((choice) and (choice[0].lower() == 's'))
 		if should_overwrite:
 			with open('out/' + name, 'w') as fout:
 				# ricerca utensili
@@ -141,6 +145,8 @@ def process(name):
 					ut_start = line.find('D=') + 2
 					ut_end   = line.find('.', ut_start)
 					utensile += line[ut_start:ut_end]
+					if (line[ut_end:ut_end+3] != '.00'):
+						utensile += line[ut_end:ut_end+2]
 
 					l385_index = fin_content.find('L385=',match_index) + 5
 					l386_index = fin_content.find('L386=',match_index) + 5
@@ -171,6 +177,14 @@ def process(name):
 
 
 				for line in fin_content.split('\n'):
+					line_number = re_n.findall(line)[0]
+					line = line.replace(line_number, line_number + '  ')
+					XYZAB_search = re_XYZAB.search(line)
+					while XYZAB_search != None:
+						span = XYZAB_search.span()
+						coordinate_string = line[span[0] + 1:span[1]]
+						line = line.replace(coordinate_string, ' ' + coordinate_string)
+						XYZAB_search = re_XYZAB.search(line)
 					line += '\n'
 					if not info_inserted:
 						if '(TCP)' in line:
@@ -360,7 +374,7 @@ if __name__ == '__main__':
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
-	print("PREPARAZIONE TAGLIO (v{})\n\n".format(VERSION_NUMBER))
+	print("PREPARAZIONE TAGLIO (v{})\n".format(VERSION_NUMBER))
 	for path in paths:
 		if not os.path.isdir(path):
 			filename = os.path.basename(path)
