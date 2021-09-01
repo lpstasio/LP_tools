@@ -2,6 +2,8 @@ import re
 import glob
 import os
 
+VERSION_NUMBER = 3
+
 def process(name, start, end, type):
 	pause = False
 	has_started = False
@@ -10,13 +12,13 @@ def process(name, start, end, type):
 
 	skip_z_guard = False
 	is_15mm = (('15mm' in name) or ('15 mm' in name)) and (type == 'NUMERI')
-	z_expr = re.compile('[zZ][-]*[0-9]*\.*')
+	z_expr = re.compile('[zZ][-]*[0-9]*\.?[0-9]*')
 	z_list = dict()
 	with open('in/' + name,'r') as fin:
 		should_overwrite = True
 		if os.path.exists('out/' + name):
 			choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
-			should_overwrite = choice[0].lower() == 's'
+			should_overwrite = ((choice) and (choice[0].lower() == 's'))
 		if should_overwrite:
 			with open('out/' + name, 'w') as fout:
 				for line in fin.readlines():
@@ -113,7 +115,7 @@ if __name__ == '__main__':
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
-	print("PREPARAZIONE TAGLIO MASCHERE (v2)")
+	print("PREPARAZIONE TAGLIO MASCHERE (v{})".format(VERSION_NUMBER))
 	for path in paths:
 		filename = os.path.basename(path)
 		if 'maschera' in filename.lower():
