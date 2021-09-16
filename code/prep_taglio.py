@@ -1,8 +1,9 @@
 import re
 import glob
 import os
+from datetime import date
 
-VERSION_NUMBER = 8
+VERSION_NUMBER = 9
 
 # CHANGELOG
 #   v2: '(UIO,X,Y,Z)' era precedente inserito ad ogni cambio di utensile, invece che solo in quello iniziale
@@ -15,6 +16,12 @@ VERSION_NUMBER = 8
 #   v7: Riconosce 'R6'/'r6' nel nome del file ed esporta le modifiche necessarie
 #   v8: Aggiunte spaziature (dopo 'Nxx' e tra le coordinate)
 #       Fix: riconosce 'F2.5'
+#   v9: Nuovo header
+#       Rimossi comandi 'DIS'
+#       Esportazione data
+#       Riconosce 'CLIENTE', 'TAGLIO PEZZO', 'NOTE', 'DESCRIZIONE PEZZO' e legge i relativi dati che seguono
+#       Separazione visiva cambio utensile
+#       Carriage return dopo il prompt per la sovrascrittura
 #
 #
 # PLANNED:
@@ -25,12 +32,17 @@ VERSION_NUMBER = 8
 #   Centratura utensili in header
 #   Numerazione righe
 
-nome_programma     = 'NOME_PROGRAMMA'
-nome_programmatore = ''
-dima               = 'XX'
-
 MOTORE_UTENSILE  = 0
 MOTORE_LUNGHEZZA = 1
+
+CLIENT_SEARCH_TOKEN       = 'CLIENTE'
+DESC_SEARCH_TOKEN         = 'DESCRIZIONE PEZZO'
+CODE_SEARCH_TOKEN         = 'TAGLIO PEZZO'
+PROGRAM_NAME_SEARCH_TOKEN = 'NOTE'
+
+desc_first_line_max_length = 34
+desc_other_line_max_length = 45
+robot_console_line_size    = 80
 
 info_text_blank = '''
 ;
@@ -40,10 +52,17 @@ info_text_blank = '''
 '''[1:]
 
 info_text = '''
-;                        __NOMEPR__
-;  <R__NROBOT__>  __DIMA__                   __PROGRAMMATORE__
-;                     __UTENSILI__
+;                             * * * __NOMEPR__ * * *
+; ==============================================================================
+;                                                "__CLIENTE__"
+; __PRIMARIGADESCRIZIONE__             [__CODICE__]__ALTRERIGHEDESCRIZIONE__
 ;
+; ==============================================================================
+; __UTENSILI__
+;  <R__NROBOT__>  __DIMA__
+;                                             __DATA__ __PROGRAMMATORE__
+;
+; ==============================================================================
 '''[1:]
 
 origin_text = '''
@@ -58,7 +77,8 @@ start_text = '''
 ;
 M2__NMOTORE__ S19000
 ;
-__ORIGIN__G90 G0 __X__ __Y__ __B__ __A__
+__ORIGIN__; ================================== M__NMOTORE__ __UTENSILE__ =====================================
+G90 G0 __X__ __Y__ __B__ __A__
 ;
 L365=0
 L385=__LUTENSILE__ ; L. ut. Libera
@@ -87,11 +107,42 @@ M5
 ;
 '''[1:]
 
+def str_replace_at_index(s, index, replacement):
+	l = list(s)
+	l[index] = replacement
+	return "".join(l)
+
+def str_get_value(s, identifier, separator = ':', end_token = '\n'):
+	value_start_index = s.find(identifier)
+	value_text = ''
+	if value_start_index > 0:
+		value_start_index = s.find(separator, value_start_index + len(identifier)) + len(separator)
+		value_end_index = value_start_index
+
+		if isinstance(end_token, list) or isinstance(end_token, tuple):
+			min_index = s.find(end_token[0], value_start_index)
+			for token in end_token[1:]:
+				index = s.find(token, value_start_index)
+				if index > 0 and index < min_index:
+					min_index = index
+			value_end_index = min_index
+		else:
+			value_end_index = s.find(end_token, value_start_index)
+		value_text = s[value_start_index : value_end_index].strip()
+	return value_text
+
 def process(name):
 	robot_number = 0
+	nome_programma     = '_NOMEPR_'
+	nome_programmatore = 'programmatore'
+	descrizione_pezzo  = '_descrizione_'
+	codice_pezzo       = '_codice_'
+	client_text        = '_cliente_'
+	dima               = 'XX'
+
 
 	info_inserted    = False
-	is_writing       = True
+	is_writing       = False
 	tcp1_found       = False
 	tcp0_found       = False
 	g0_found         = False
@@ -128,12 +179,21 @@ def process(name):
 	with open('in/' + name,'r') as fin:
 		should_overwrite = True
 		if os.path.exists('out/' + name):
-			choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
+			prompt_text = "Il file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] "
+			choice = input("\n" + prompt_text)
 			should_overwrite = ((choice) and (choice[0].lower() == 's'))
 		if should_overwrite:
+			prompt_length = len(prompt_text)
+			if choice:
+				prompt_length += len(choice)
+			print('\033[1A\r' + ' ' * prompt_length + '\r', end='')
 			with open('out/' + name, 'w') as fout:
 				# ricerca utensili
 				fin_content = fin.read()
+
+				#
+				# Ricera utensili utilizzati
+				# ================================================================================================
 				match_index = fin_content.find('FRESA')
 				utensile = ''
 				while (match_index > 0):
@@ -163,18 +223,50 @@ def process(name):
 
 					match_index = fin_content.find('FRESA', l386_index)
 
-				# Preparazione info
+				#
+				# Testo info: utensili
+				# ================================================================================================
 				utensili_text = ''
 				for i in range(3):
 					if motori[i] != None:
 						utensili_text += 'M{} {} L{} - '.format(i+2, motori[i][0], motori[i][1])
 				utensili_text = utensili_text[:-3]
 
+				#
+				# Testo info: robot
+				# ================================================================================================
 				robot_text = ''
 				if (robot_number > 0):
 					robot_text = ' [R' + str(robot_number) + ']'
 				print(name, robot_text + ' (' + utensili_text + ')')
 
+				#
+				# Testo info: cliente
+				# ================================================================================================
+				client_search = str_get_value(fin_content, CLIENT_SEARCH_TOKEN)
+				if client_search:
+					client_text = client_search.lower()
+
+				#
+				# Testo info: descrizione
+				# ================================================================================================
+				desc_search = str_get_value(fin_content, DESC_SEARCH_TOKEN)
+				if desc_search:
+					descrizione_pezzo = desc_search.capitalize()
+
+				#
+				# Testo info: codice
+				# ================================================================================================
+				code_search = str_get_value(fin_content, CODE_SEARCH_TOKEN, ' ', [' ', '_'])
+				if code_search:
+					codice_pezzo = code_search.upper()
+
+				#
+				# Testo info: nome programma
+				# ================================================================================================
+				name_search = str_get_value(fin_content, PROGRAM_NAME_SEARCH_TOKEN, ' ', '\n')
+				if name_search:
+					nome_programma = name_search.upper()
 
 				for line in fin_content.split('\n'):
 					line_number = re_n.findall(line)[0]
@@ -187,24 +279,61 @@ def process(name):
 						XYZAB_search = re_XYZAB.search(line)
 					line += '\n'
 					if not info_inserted:
-						if '(TCP)' in line:
-							is_writing = False
 						if 'DIS' in line:       # Info iniziale
+							#
+							# Formattazione descrizione
+							# ================================================================================================
+							if len(descrizione_pezzo) <= desc_first_line_max_length:
+								descrizione_pezzo = [descrizione_pezzo]
+							else: # len_desc > desc_first_line_max_length
+								max_len = desc_first_line_max_length
+								processed_len = 0
+								while (len(descrizione_pezzo) - processed_len) > max_len:
+									last_space_index = descrizione_pezzo.rfind(' ', processed_len, processed_len + max_len)
+									if last_space_index < 0:
+										last_space_index = descrizione_pezzo.find(' ', processed_len + max_len)
+
+									if last_space_index > 0:
+										descrizione_pezzo = str_replace_at_index(descrizione_pezzo, last_space_index, '\n; ')
+										processed_len = last_space_index + 3
+									else:
+										break
+									max_len = desc_other_line_max_length
+								descrizione_pezzo = descrizione_pezzo.split('\n')
+
+							descrizione_pezzo[0] = descrizione_pezzo[0].ljust(desc_first_line_max_length, ' ')
+
+							#
+							# Formattazione data
+							# ================================================================================================
+							date_text = date.today().strftime('%d/%m/%Y')
+
+							#
+							# Output intestazione
+							# ================================================================================================
+							prima_riga_desc  = descrizione_pezzo[0]
+							altre_righe_desc = ''
+							if len(descrizione_pezzo) > 1:
+								descrizione_pezzo[1] = '\n' + descrizione_pezzo[1]
+								altre_righe_desc = descrizione_pezzo[1:]
 							fout.write(info_text.\
 									   replace('__NOMEPR__', nome_programma).\
-									   replace('__UTENSILI__', utensili_text).\
+									   replace('__UTENSILI__', utensili_text.center(robot_console_line_size-2, ' ').rstrip()).\
 									   replace('__DIMA__', dima).\
 									   replace('__NROBOT__', str(robot_number).replace('0','X')).\
-									   replace('__PROGRAMMATORE__', nome_programmatore))
+									   replace('__PROGRAMMATORE__', nome_programmatore).\
+									   replace('__PRIMARIGADESCRIZIONE__', prima_riga_desc).\
+									   replace('__ALTRERIGHEDESCRIZIONE__', '\n'.join(altre_righe_desc)).\
+									   replace('__CODICE__', codice_pezzo).\
+									   replace('__CLIENTE__', client_text).\
+									   replace('__DATA__', date_text))
 							info_inserted = True
-							is_writing = True
 							tcp0_found = True
 					else:  # info_inserted == True
+						line = line.replace('G00', 'G0')
+						line = line.replace('G01', 'G1')
 						if tcp0_found and (not tcp1_found):
-							if 'DIS' in line:
-								is_writing = True
-							else:
-								is_writing = False
+							is_writing = False
 
 							if 'L385' in line:
 								# TODO: use this for info_text
@@ -235,9 +364,15 @@ def process(name):
 										origin = origin_text
 										origin_inserted = True
 
+									mot_index      = int(current_mot)
+									utensile_text  = ''
+									if (mot_index > 1) and (mot_index <= 4):
+										utensile_text = motori[mot_index-2][MOTORE_UTENSILE]
+
 									fout.write(start_text.\
 												replace('__ORIGIN__',    origin).\
 												replace('__NMOTORE__',   current_mot).\
+												replace('__UTENSILE__',  utensile_text).\
 												replace('__LUTENSILE__', current_len).\
 												replace('__X__', x).\
 												replace('__Y__', y).\
@@ -296,7 +431,8 @@ def process_r6(name):
 	with open('out/temp','r') as fin:
 		should_overwrite = True
 		if os.path.exists('out/' + name):
-			choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
+			prompt_text = "Il file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] "
+			choice = input("\n" + prompt_text)
 			should_overwrite = choice[0].lower() == 's'
 		if should_overwrite:
 			with open('out/' + name, 'w') as fout:
