@@ -3,7 +3,7 @@ import glob
 import os
 from datetime import date
 
-VERSION_NUMBER = 9
+VERSION_NUMBER = 10
 
 # CHANGELOG
 #   v2: '(UIO,X,Y,Z)' era precedente inserito ad ogni cambio di utensile, invece che solo in quello iniziale
@@ -23,6 +23,8 @@ VERSION_NUMBER = 9
 #       Separazione visiva cambio utensile
 #       Carriage return dopo il prompt per la sovrascrittura
 #       Riconosce 'revXX'/'rev_XX'/'rev.XX' nel nome del programma
+#  v10: Riconosce 'R4'/'r4' nel nome del file ed esporta le modifiche necessarie
+#       Riconosce 'R5'/'r5' nel nome del file ed esporta le modifiche necessarie
 #
 #
 # PLANNED:
@@ -174,6 +176,10 @@ def process(name):
 		robot_number = 2
 	elif ('r3' in name.lower()):
 		robot_number = 3
+	elif ('r4' in name.lower()):
+		robot_number = 4
+	elif ('r5' in name.lower()):
+		robot_number = 5
 	elif ('r6' in name.lower()):
 		robot_number = 6
 	elif ('r9' in name.lower()):
@@ -460,6 +466,10 @@ def process(name):
 					process_r2_r9(name, False)
 				elif robot_number == 3:
 					process_r3(name)
+				elif robot_number == 4:
+					process_r4_r5(name, True)
+				elif robot_number == 5:
+					process_r4_r5(name, False)
 				elif robot_number == 6:
 					process_r6(name)
 				elif robot_number == 9:
@@ -542,6 +552,48 @@ def process_r3(name):
 						line = line.replace('X0 Y0 Z0', 'X-1252 Y322 Z200 A-135 B0')
 						if 'G90 G0 Y-100' in line:
 							line = ''
+					elif '(UAO,0)' in line:
+						uao0_found = True
+					fout.write(line)
+
+def process_r4_r5(name, is_r4):
+	uio_found = False
+	uao0_found = False
+
+	X        = '-2002'
+	Y        = '244'
+	Z        = '386'
+	Y_safety = '200'
+	if is_r4:
+		X        = '-1252'
+		Y        = '136'
+		Z        = '200'
+		Y_safety = '111'
+
+	with open('out/temp','r') as fin:
+		should_overwrite = True
+		if os.path.exists('out/' + name):
+			choice = input("\nIl file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] ")
+			should_overwrite = choice[0].lower() == 's'
+		if should_overwrite:
+			with open('out/' + name, 'w') as fout:
+				a0b0_found = False
+				for line in fin.readlines():
+					if not uio_found:
+						if 'UIO' in line:
+							uio_found = True
+						line = line.replace('G79 G0 Z0', 'G79 G0 Z' + Z)
+						line = line.replace('G79 G0 Y-100', 'G79 G0 Y' + Y_safety)
+					elif uao0_found:
+						if a0b0_found:
+							line = ''
+							a0b0_found = False
+						if 'A0 B0' in line:
+							line = ''
+							a0b0_found = True
+						line = line.replace('G90 G0 Z0',    'G90 G0 Z' + Z)
+						line = line.replace('G90 G0 Y-100', 'G90 G0 Y' + Y_safety + ' A0 B0')
+						line = line.replace('X0 Y0 Z0', 'X' + X + ' Y' + Y + ' Z' + Z)
 					elif '(UAO,0)' in line:
 						uao0_found = True
 					fout.write(line)
