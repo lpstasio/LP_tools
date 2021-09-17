@@ -1,0 +1,9 @@
+1. Nel job manager, nominare il programma 'Taglio pezzo ' + il codice del pezzo.
+	Eventuali revisioni devono essere indicate dopo il codice del pezzo, con 'rev' seguito da lettere o numeri; le lettere o numeri possono essere separati da 'rev' attraverso qualsiasi carattere non alfanumerico.
+2. Nel menù 'File' in tebis, compilare nella sezione in basso a destra le seguenti informazioni:
+	- CLIENTE: l'identificativo del cliente;
+	- DESCRIZIONE PEZZO: la descrizione del pezzo come riportata nel riepilogo ordini;
+	- NOTE: il nome del programma finale, composto da 7 caratteri alfanumerici.
+3. Durante la creazione del programma in tebis:
+	- Per ogni link, inserire i commenti 'INIZIO LINK' e 'FINE LINK' nei punti 1 e 2 del link;
+	                 se il link giace interamente sul piano XY e non avvengono movimenti in Z, lo script eliminerà tutti i punti intermedi, lasciando soltanto la prima e l'ultima coordinata del link.
