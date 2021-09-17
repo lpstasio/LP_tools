@@ -25,6 +25,8 @@ VERSION_NUMBER = 10
 #       Riconosce 'revXX'/'rev_XX'/'rev.XX' nel nome del programma
 #  v10: Riconosce 'R4'/'r4' nel nome del file ed esporta le modifiche necessarie
 #       Riconosce 'R5'/'r5' nel nome del file ed esporta le modifiche necessarie
+#       Riconosce 'R7'/'r7' nel nome del file ed esporta le modifiche necessarie
+#       Riconosce 'R8'/'r8' nel nome del file ed esporta le modifiche necessarie
 #
 #
 # PLANNED:
@@ -182,6 +184,10 @@ def process(name):
 		robot_number = 5
 	elif ('r6' in name.lower()):
 		robot_number = 6
+	elif ('r7' in name.lower()):
+		robot_number = 7
+	elif ('r8' in name.lower()):
+		robot_number = 8
 	elif ('r9' in name.lower()):
 		robot_number = 9
 
@@ -460,7 +466,7 @@ def process(name):
 					elif is_linking:
 						if not ('INIZIO LINK' in line):
 							link_buffer += line
-			if robot_number > 0:
+			if (robot_number > 0) and (robot_number != 7) and (robot_number != 8):
 				os.rename('out/' + name, 'out/temp')
 				if robot_number == 2:
 					process_r2_r9(name, False)
