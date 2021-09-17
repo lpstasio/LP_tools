@@ -40,6 +40,7 @@ CLIENT_SEARCH_TOKEN       = 'CLIENTE'
 DESC_SEARCH_TOKEN         = 'DESCRIZIONE PEZZO'
 CODE_SEARCH_TOKEN         = 'TAGLIO PEZZO'
 PROGRAM_NAME_SEARCH_TOKEN = 'NOTE'
+REV_SEARCH_TOKEN          = 'REV'
 
 desc_first_line_max_length = 34
 desc_other_line_max_length = 45
@@ -268,7 +269,6 @@ def process(name):
 				#
 				# Testo info: revisione
 				# ================================================================================================
-				REV_SEARCH_TOKEN = 'REV'
 				rev_search = fin_content.find(REV_SEARCH_TOKEN)
 				rev_value = ''
 				if rev_search >= 0:
