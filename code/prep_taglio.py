@@ -22,6 +22,7 @@ VERSION_NUMBER = 9
 #       Riconosce 'CLIENTE', 'TAGLIO PEZZO', 'NOTE', 'DESCRIZIONE PEZZO' e legge i relativi dati che seguono
 #       Separazione visiva cambio utensile
 #       Carriage return dopo il prompt per la sovrascrittura
+#       Riconosce 'revXX'/'rev_XX'/'rev.XX' nel nome del programma
 #
 #
 # PLANNED:
@@ -55,12 +56,12 @@ info_text = '''
 ;                             * * * __NOMEPR__ * * *
 ; ==============================================================================
 ;                                                "__CLIENTE__"
-; __PRIMARIGADESCRIZIONE__             [__CODICE__]__ALTRERIGHEDESCRIZIONE__
+; __PRIMARIGADESCRIZIONE__             [__CODICE__] __REV____ALTRERIGHEDESCRIZIONE__
 ;
 ; ==============================================================================
 ; __UTENSILI__
 ;  <R__NROBOT__>  __DIMA__
-;                                             __DATA__ __PROGRAMMATORE__
+;                                      __REV__  __DATA__ __PROGRAMMATORE__
 ;
 ; ==============================================================================
 '''[1:]
@@ -138,6 +139,7 @@ def process(name):
 	descrizione_pezzo  = '_descrizione_'
 	codice_pezzo       = '_codice_'
 	client_text        = '_cliente_'
+	rev_text           = '     '
 	dima               = 'XX'
 
 
@@ -178,15 +180,17 @@ def process(name):
 
 	with open('in/' + name,'r') as fin:
 		should_overwrite = True
+		prompt_text = ''
 		if os.path.exists('out/' + name):
 			prompt_text = "Il file '" + name + "' esiste nella cartella 'out', sovrascrivere? [Sn] "
-			choice = input("\n" + prompt_text)
+			choice = input(prompt_text)
 			should_overwrite = ((choice) and (choice[0].lower() == 's'))
-		if should_overwrite:
 			prompt_length = len(prompt_text)
 			if choice:
 				prompt_length += len(choice)
 			print('\033[1A\r' + ' ' * prompt_length + '\r', end='')
+			#print('\b' * prompt_length, end='')
+		if should_overwrite:
 			with open('out/' + name, 'w') as fout:
 				# ricerca utensili
 				fin_content = fin.read()
@@ -238,7 +242,7 @@ def process(name):
 				robot_text = ''
 				if (robot_number > 0):
 					robot_text = ' [R' + str(robot_number) + ']'
-				print(name, robot_text + ' (' + utensili_text + ')')
+				print(name, robot_text + ' (' + utensili_text + ')\n')
 
 				#
 				# Testo info: cliente
@@ -260,6 +264,42 @@ def process(name):
 				code_search = str_get_value(fin_content, CODE_SEARCH_TOKEN, ' ', [' ', '_'])
 				if code_search:
 					codice_pezzo = code_search.upper()
+
+				#
+				# Testo info: revisione
+				# ================================================================================================
+				REV_SEARCH_TOKEN = 'REV'
+				rev_search = fin_content.find(REV_SEARCH_TOKEN)
+				rev_value = ''
+				if rev_search >= 0:
+					rev_search += len(REV_SEARCH_TOKEN)
+
+					# getting next alphanumeric
+					is_numeric = False
+					is_started = False
+					for c in fin_content[rev_search:]:
+						if is_started:
+							if is_numeric:
+								if c.isnumeric():
+									rev_value += c
+								else:
+									rev_value = str(int(rev_value))
+									break
+							else:
+								if c.isalpha():
+									rev_value += c
+								else:
+									break
+						else:
+							if c.isalpha():
+								is_numeric = False
+								is_started = True
+								rev_value += c
+							elif c.isnumeric():
+								is_numeric = True
+								is_started = True
+								rev_value += c
+					rev_text = 'Rev.' + rev_value
 
 				#
 				# Testo info: nome programma
@@ -326,7 +366,8 @@ def process(name):
 									   replace('__ALTRERIGHEDESCRIZIONE__', '\n'.join(altre_righe_desc)).\
 									   replace('__CODICE__', codice_pezzo).\
 									   replace('__CLIENTE__', client_text).\
-									   replace('__DATA__', date_text))
+									   replace('__DATA__', date_text).\
+									   replace('__REV__', rev_text))
 							info_inserted = True
 							tcp0_found = True
 					else:  # info_inserted == True
