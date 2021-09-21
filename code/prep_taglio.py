@@ -3,7 +3,7 @@ import glob
 import os
 from datetime import date
 
-VERSION_NUMBER = 10
+VERSION_NUMBER = 11
 
 # CHANGELOG
 #   v2: '(UIO,X,Y,Z)' era precedente inserito ad ogni cambio di utensile, invece che solo in quello iniziale
@@ -27,6 +27,8 @@ VERSION_NUMBER = 10
 #       Riconosce 'R5'/'r5' nel nome del file ed esporta le modifiche necessarie
 #       Riconosce 'R7'/'r7' nel nome del file ed esporta le modifiche necessarie
 #       Riconosce 'R8'/'r8' nel nome del file ed esporta le modifiche necessarie
+#  v11: Avvisa nel caso in cui il nome del programma inserito nella sezione 'NOTE' in tebis contenga piu' o meno di 7 caratteri
+#       Legge il codice del pezzo da 'CODICE PEZZO', compilato da tebis
 #
 #
 # PLANNED:
@@ -42,7 +44,7 @@ MOTORE_LUNGHEZZA = 1
 
 CLIENT_SEARCH_TOKEN       = 'CLIENTE'
 DESC_SEARCH_TOKEN         = 'DESCRIZIONE PEZZO'
-CODE_SEARCH_TOKEN         = 'TAGLIO PEZZO'
+CODE_SEARCH_TOKEN         = 'CODICE PEZZO'
 PROGRAM_NAME_SEARCH_TOKEN = 'NOTE'
 REV_SEARCH_TOKEN          = 'REV'
 
@@ -255,7 +257,7 @@ def process(name):
 				robot_text = ''
 				if (robot_number > 0):
 					robot_text = ' [R' + str(robot_number) + ']'
-				print(name, robot_text + ' (' + utensili_text + ')\n')
+				print(name, robot_text + ' (' + utensili_text + ')')
 
 				#
 				# Testo info: cliente
@@ -274,7 +276,7 @@ def process(name):
 				#
 				# Testo info: codice
 				# ================================================================================================
-				code_search = str_get_value(fin_content, CODE_SEARCH_TOKEN, ' ', [' ', '_'])
+				code_search = str_get_value(fin_content, CODE_SEARCH_TOKEN)
 				if code_search:
 					codice_pezzo = code_search.upper()
 
@@ -319,6 +321,8 @@ def process(name):
 				name_search = str_get_value(fin_content, PROGRAM_NAME_SEARCH_TOKEN, ' ', '\n')
 				if name_search:
 					nome_programma = name_search.upper()
+					if len(nome_programma) != 7:
+						print("ATTENZIONE: nome '" + nome_programma + "' è composto da", len(nome_programma), "caratteri")
 
 				for line in fin_content.split('\n'):
 					line_number = re_n.findall(line)[0]
@@ -481,6 +485,7 @@ def process(name):
 				elif robot_number == 9:
 					process_r2_r9(name, True)
 				os.remove('out/temp')
+		print('')
 
 def process_r6(name):
 	uao0_inserted = False
