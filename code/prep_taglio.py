@@ -32,12 +32,7 @@ VERSION_NUMBER = 11
 #
 #
 # PLANNED:
-#   Data nell'header
-#   R4, R5
 #   Posizioni dime
-#   Input nome?
-#   Centratura utensili in header
-#   Numerazione righe
 
 MOTORE_UTENSILE  = 0
 MOTORE_LUNGHEZZA = 1
