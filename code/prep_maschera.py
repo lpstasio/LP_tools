@@ -4,7 +4,7 @@ import os
 
 # TODO: warning Z
 #
-VERSION_NUMBER = 3
+VERSION_NUMBER = 4
 
 def process(name, start, end, type):
 	pause = False
@@ -113,7 +113,7 @@ M30
 '''
 
 if __name__ == '__main__':
-	paths = glob.glob('in/*.nc')
+	paths = glob.glob('in/*')
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
