@@ -10,8 +10,27 @@ _VERSION = 0
 #           L385/L386 substitutes?
 #           config compiler
 #           custom variables
+#           IMPORTANT: when compiling config, if no 'PRIMAX/Y/Z/A/B' is used, warn and keep first coordinate
+#           add C axis support
+#           revision alpha/numeric mix
+#           robot directive ('r2') preferred position (on the right or on the left)
+#
+#
+#
+#
+#
+# variabili configurazione:
+#            "_stringa_cliente"               : "CLIENTE",
+#            "_stringa_descrizione_pezzo"     : "DESCRIZIONE PEZZO",
+#            "_stringa_codice"                : "CODICE PEZZO",
+#            "_stringa_revisione"             : "REV",
+#            "_stringa_nome_programma"        : "NOTE"
+#            "_desc_max_lunghezza_prima_riga" : "34",
+#            "_desc_max_lunghezza"            : "45",
+#            "_formato_data"                  : "g.m.aaaa",
 
 import os, glob
+from datetime import datetime
 
 NCSEC_MOTORE      = 0
 NCSEC_UTENSILE    = 1
@@ -19,6 +38,7 @@ NCSEC_LUNGHEZZA   = 2
 NCSEC_COORDINATES = 3
 NCSEC_TOTAL       = 4
 
+# @todo: move into config
 SEARCH_L385  = 'L385'
 SEARCH_L386  = 'L386'
 SEARCH_FRESA = 'FRESA CILINDRICA'
@@ -30,16 +50,70 @@ default_vars = {
 	'POSIZIONEDIMA' : 'XX',
 }
 
-def str_get_number_ignore_any_before(s):
+def _str_get_number(s, ignore_before):
 	result = ''
 	for c in s:
-		if (c.isdecimal()) or (c == '.') or (c == '-'):
+		if (c.isdecimal()) or \
+			((not result) and (c == '-')) or \
+			(    (result) and (c == '.') and ('.' not in result)):
 			result += c
-		elif result:
+		elif ignore_before:
+			if result:
+				break
+		else:
 			break
 		pass
 	pass
 	return result
+pass
+
+def str_get_number_ignore_any_before(s):
+	return _str_get_number(s, True)
+pass
+
+def str_get_number_or_nothing(s):
+	return _str_get_number(s, False)
+pass
+
+def str_get_coordinate(axis, line):
+	result = ''
+	if (axis in 'XYZABC'):
+		search_index = line.find(axis)
+		if search_index >= 0:
+			result = str_get_number_ignore_any_before(line[search_index:])
+			if not result:
+				result = '0'
+			pass
+		else:
+			result = 'INESISTENTE'
+		pass
+	else:
+		print("Asserzione fallita: asse '{}' invalido".format(axis))
+		__ASSERT_UNDEFINED_AXIS
+	pass
+	return result
+pass
+
+def str_get_value(s, identifier, separator = ':', end_token = '\n'):
+	value_start_index = s.find(identifier)
+	value_text = ''
+	if value_start_index > 0:
+		value_start_index = s.find(separator, value_start_index + len(identifier)) + len(separator)
+		value_end_index = value_start_index
+
+		if isinstance(end_token, list) or isinstance(end_token, tuple):
+			min_index = s.find(end_token[0], value_start_index)
+			for token in end_token[1:]:
+				index = s.find(token, value_start_index)
+				if index > 0 and index < min_index:
+					min_index = index
+			value_end_index = min_index
+		else:
+			value_end_index = s.find(end_token, value_start_index)
+		pass
+		value_text = s[value_start_index : value_end_index].strip()
+	pass
+	return value_text
 pass
 
 def in_str(s, subst):
@@ -55,7 +129,7 @@ def in_str(s, subst):
 	return False
 pass
 
-def read_template(filename):
+def read_template_raw(filename):
 	template  = ''
 	variables = []
 	if os.path.exists('config/' + filename):
@@ -92,7 +166,18 @@ def read_template(filename):
 	return template, variables
 pass
 
+def read_and_process_template(filename, variable_database):
+	template, pending_vars = read_template_raw(filename)
+	for var in pending_vars:
+		if var in variable_database.keys():
+			template = template.replace('$'+var+'$', variable_database[var])
+		pass
+	pass
+	return template
+pass
+
 # @todo: fallback hardcoded variable defaults
+# @todo: robot specific variable override
 def load_conf(robot = 0):
 	vars = dict()
 	#
@@ -112,23 +197,196 @@ def load_conf(robot = 0):
 			if line:
 				separator_index = line.find(':')
 				if separator_index < 0:
-					print("ERRORE: nessun ':' trovato nella riga {} del file 'config/variabili.conf':\n\t{}".format(line_number, org_line))
+					print("ERRORE: nessun ':' trovato;\n  config/variabili.conf[{}]: '{}'\n".\
+						  format(line_number, org_line))
 					__ERROR_VARIABLE_DEFINITION_SYNTAX_ERROR
 				pass
 
-				var_name  = line[:separator_index].rstrip()
+				var_name  = line[:separator_index].replace(' ', '')
 				var_value = line[separator_index + 1:].lstrip()
 				
+				if not var_name:
+					print("ERRORE: definizione variabile senza nome;\n  config/variabili.conf[{}]: '{}'\n".\
+						  format(line_number, org_line))
+					__ERROR_VARIABLE_DEFINITION_EMPTY_NAME
+				pass
+				
 				if var_name in vars.keys():
-					print("ATTENZIONE: variabile '{}' ridefinita nella riga {} del file 'config/variabili.conf'; il nuovo valore sarà ignorato".\
-						  format(var_name, line_number))
+					print("Attenzione: variabile precedentemente definita, il nuovo valore sarà ignorato;\n  config/variabili.conf[{}]: '{}'\n".\
+						  format(line_number, org_line))
 				else:
 					vars[var_name] = var_value
 				pass
 			pass
 		pass
 	pass
-	return vars
+
+
+	#
+	# Formattazione data
+	# ================================================================================================
+	vars['_formato_data'] = vars.get('_formato_data', 'GG.MM.AAAA').\
+							replace('aaaa',  '%Y').\
+							replace(  'aa',  '%y').\
+							replace(  'm',  '%m').\
+							replace(  'g',  '%d').\
+							replace(  'h',  '%I').\
+							replace(  'H',  '%H').\
+							replace(  'M',  '%M').\
+							replace(  's',  '%S')
+	vars['DATA'] = datetime.now().strftime(vars['_formato_data'])
+
+	forced_vars = {
+		"_stringa_cliente"               : "CLIENTE",
+		"_stringa_descrizione_pezzo"     : "DESCRIZIONE PEZZO",
+		"_desc_max_lunghezza_prima_riga" : "34",
+		"_desc_max_lunghezza"            : "45",
+		"_stringa_codice"                : "CODICE PEZZO",
+		"_stringa_revisione"             : "REV",
+		"_stringa_nome_programma"        : "NOTE"
+	}
+	forced_vars.update(vars)
+	return forced_vars
+pass
+
+def load_program_info(filename, content, config):
+	result = {
+		'PROGRAMMA'               : 'PRG0123',
+		'CLIENTE'                 : 'cliente',
+		'DESCRIZIONE_PRIMA_RIGA'  : 'Descrizione',
+		'DESCRIZIONE_ALTRE_RIGHE' : '',
+		'CODICE'			      : '00.00.00.00',
+		'UTENSILI'                : 'UTENSILI',
+		'ROBOT'                   : '',
+		'REV'                     : ''
+	}
+
+	#
+	# Robot
+	# ================================================================================================
+	robot_id = ''
+	search_end_index = None
+	while not robot_id:
+		search = filename[:search_end_index].lower().rfind('r')
+		if search >= 0:
+			robot_id = str_get_number_or_nothing(filename[search+1:])
+			search_end_index = search
+		else:
+			break
+		pass
+
+		if robot_id:
+			robot_id = robot_id.rstrip('.')
+			as_number = int(robot_id)
+			if ('.' in robot_id) or (as_number < 0) or (as_number > 100):
+				robot_id = ''
+			pass
+		pass
+	if robot_id:
+		result['ROBOT'] = robot_id
+
+	#
+	# Cliente
+	# ================================================================================================
+	search = str_get_value(content, config['_stringa_cliente'])
+	if search:
+		result['CLIENTE'] = search.lower()
+
+	#
+	# Descrizione
+	# ================================================================================================
+	descrizione = result['DESCRIZIONE_PRIMA_RIGA']
+	search = str_get_value(content, config['_stringa_descrizione_pezzo'])
+	if search:
+		descrizione = search.capitalize()
+
+	#
+	# Formattazione descrizione
+	# ================================================================================================
+	desc_first_line_max_length = int(config.get('_desc_max_lunghezza_prima_riga', '34'))
+	desc_other_line_max_length = int(config.get('_desc_max_lunghezza', '45'))
+
+	if len(descrizione) <= desc_first_line_max_length:
+		descrizione = [descrizione]
+	else: # len_desc > desc_first_line_max_length
+		max_len = desc_first_line_max_length
+		processed_len = 0
+		while (len(descrizione_pezzo) - processed_len) > max_len:
+			last_space_index = descrizione_pezzo.rfind(' ', processed_len, processed_len + max_len)
+			if last_space_index < 0:
+				last_space_index = descrizione_pezzo.find(' ', processed_len + max_len)
+			pass
+
+			if last_space_index > 0:
+				descrizione_pezzo = str_replace_at_index(descrizione_pezzo, last_space_index, '\n; ')
+				processed_len = last_space_index + 3
+			else:
+				break
+			pass
+			max_len = desc_other_line_max_length
+		pass
+		descrizione = descrizione.split('\n')
+	pass
+
+	result['DESCRIZIONE_PRIMA_RIGA']  = descrizione[0].ljust(desc_first_line_max_length, ' ')
+	if len(descrizione) > 1:  # descrizione ha più di una riga
+		descrizione[1] = '\n' + descrizione[1]
+		result['DESCRIZIONE_ALTRE_RIGHE'] = '\n'.join(descrizione[1:])
+	pass
+
+	#
+	# Codice
+	# ================================================================================================
+	search = str_get_value(content, config['_stringa_codice'])
+	if search:
+		result['CODICE'] = search.upper()
+
+	#
+	# Revisione
+	# ================================================================================================
+	rev_search = content.find(config['_stringa_revisione'])
+	rev_value = ''
+	if rev_search >= 0:
+		rev_search += len(config['_stringa_revisione'])
+
+		# getting next alphanumeric
+		is_numeric = False
+		is_started = False
+		for c in content[rev_search:]:
+			if is_started:
+				if is_numeric:
+					if c.isnumeric():
+						rev_value += c
+					else:
+						rev_value = str(int(rev_value))
+						break
+				else:
+					if c.isalpha():
+						rev_value += c
+					else:
+						break
+			else:
+				if c.isalpha():
+					is_numeric = False
+					is_started = True
+					rev_value += c
+				elif c.isnumeric():
+					is_numeric = True
+					is_started = True
+					rev_value += c
+		result['REV'] = 'Rev.' + rev_value
+
+	#
+	# Nome programma
+	# ================================================================================================
+	search = str_get_value(content, config['_stringa_nome_programma'], ' ', '\n')
+	if search:
+		result['PROGRAMMA'] = search.upper()
+		if len(result['PROGRAMMA']) != 7:
+			print("ATTENZIONE: nome '" + result['PROGRAMMA'] + "' è composto da", len(result['PROGRAMMA']), "caratteri")
+		pass
+	pass
+	return result
 pass
 
 def process(filename):
@@ -137,6 +395,8 @@ def process(filename):
 		pass # @todo: prompt overwrite
 	pass
 
+	config = load_conf()
+
 	nc_sections = []
 	in_content = None
 	in_lines   = None
@@ -144,6 +404,8 @@ def process(filename):
 		with open('in/' + filename,'r') as fin:
 			in_content = fin.read()
 			in_lines = in_content.splitlines()
+
+			config.update(load_program_info(filename, in_content, config))
 			
 			line_index             = 0
 			current_section_index  = -1
@@ -199,33 +461,65 @@ def process(filename):
 					nc_sections[current_section_index][NCSEC_MOTORE] = str_get_number_ignore_any_before(line[search_index + len(SEARCH_L386):])
 				pass
 				
-				#section[NCSEC_COORDINATES] = pass
 				line_index += 1
 			pass
 		pass
 
-		vars = load_conf()
-		print(vars)
+		#print(config)
 
 		with open('out/' + filename, 'w') as fout:
-			header, header_vars = read_template('intestazione.template')
+			all_vars = []
+			header = read_and_process_template('intestazione.template', config)
 			fout_content = header
-			fout.write(header)
 			for section in nc_sections:
-				template, template_vars = read_template('utensile.template')
+				#
+				# Parsing prima coordinata
+				# ================================================================================================
+				config['PRIMAX'] = str_get_coordinate('X', section[NCSEC_COORDINATES][0])
+				config['PRIMAY'] = str_get_coordinate('Y', section[NCSEC_COORDINATES][0])
+				config['PRIMAZ'] = str_get_coordinate('Z', section[NCSEC_COORDINATES][0])
+				config['PRIMAA'] = str_get_coordinate('A', section[NCSEC_COORDINATES][0])
+				config['PRIMAB'] = str_get_coordinate('B', section[NCSEC_COORDINATES][0])
+				config['PRIMAC'] = str_get_coordinate('C', section[NCSEC_COORDINATES][0])
+				if not config['PRIMAX']:
+					config['PRIMAX'] = 'INESISTENTE'
+				if not config['PRIMAY']:
+					config['PRIMAY'] = 'INESISTENTE'
+				if not config['PRIMAZ']:
+					config['PRIMAZ'] = 'INESISTENTE'
+				if not config['PRIMAA']:
+					config['PRIMAA'] = 'INESISTENTE'
+				if not config['PRIMAB']:
+					config['PRIMAB'] = 'INESISTENTE'
+				if not config['PRIMAC']:
+					config['PRIMAC'] = 'INESISTENTE'
+
+				#
+				# Compilazione informazioni sezione
+				# ================================================================================================
+				config['LUNGHEZZAUTENSILE'] = section[NCSEC_LUNGHEZZA]
+				config['NUMEROMOTORE']      = section[NCSEC_MOTORE]
+				config['UTENSILE']          = section[NCSEC_UTENSILE]
+				config['COORDINATE']        = '\n'.join(section[NCSEC_COORDINATES][1:])
+
+				template = read_and_process_template('utensile.template', config)
+
+				config['LUNGHEZZAUTENSILE'] = '__ERRORE'
+				config['NUMEROMOTORE']      = '__ERRORE'
+				config['UTENSILE']          = '__ERRORE'
+				config['COORDINATE']        = '__ERRORE'
+				config['PRIMAX'] = '__ERRORE'
+				config['PRIMAY'] = '__ERRORE'
+				config['PRIMAZ'] = '__ERRORE'
+				config['PRIMAA'] = '__ERRORE'
+				config['PRIMAB'] = '__ERRORE'
+				config['PRIMAC'] = '__ERRORE'
 				fout_content += template
-				#fout.write('L385 = ' + section[NCSEC_LUNGHEZZA] + '\n')
-				#fout.write('L386 = ' + section[NCSEC_MOTORE] + '\n')
-				#fout.write(section[NCSEC_UTENSILE] + '\n')
-				#for line in section[NCSEC_COORDINATES]:
-				#	fout.write(line + '\n')
-				#pass
 			pass
-			footer, footer_vars = read_template('chiusura.template')
-			print(header_vars)
-			print(template_vars)
-			print(footer_vars)
+			footer = read_and_process_template('chiusura.template', config)
 			fout_content += footer
+
+			#all_vars.extend(header_vars)
 			
 			fout.write(fout_content)
 		pass
