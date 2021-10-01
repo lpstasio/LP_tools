@@ -1,0 +1,6 @@
+
+;
+G79 G0 Z800
+G79 G0 Y-2
+;
+(UIO,X$ORIGX$,Y$ORIGY$,Z$ORIGZ$)

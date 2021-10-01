@@ -152,11 +152,20 @@ def in_str(s, subst):
 pass
 
 
-def read_template_raw(filename):
+def read_template_raw(filename, robot=0):
 	template  = ''
 	variables = []
-	if os.path.exists('config/' + filename):
-		with open('config/' + filename, 'r') as file:
+
+	path = 'config/' + filename
+	if robot > 0:
+		path = 'config/r{}/{}'.format(robot, filename)
+		if not os.path.exists(path):
+			path = 'config/' + filename
+		pass
+	pass
+
+	if os.path.exists(path):
+		with open(path, 'r') as file:
 			template = file.read()
 		pass
 
@@ -184,14 +193,18 @@ def read_template_raw(filename):
 		pass
 	else:
 		# @todo: report error
-		print("DEBUG: template '{}' non trovato".format(filename))
+		print("DEBUG: template '{}' non trovato".format(path))
 	pass
 	return template, variables
 pass
 
 
 def read_and_process_template(filename, variable_database, repeating_vars):
-	template, pending_vars = read_template_raw(filename)
+	robot = variable_database['ROBOT']
+	if not robot:
+		robot = '0'
+	robot = int(robot)
+	template, pending_vars = read_template_raw(filename, robot)
 	for var in pending_vars:
 		if ':' in var:                                      # file references
 			var_segments = var.split(':')
