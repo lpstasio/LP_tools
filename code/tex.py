@@ -37,6 +37,9 @@ NCSEC_UTENSILE    = 1
 NCSEC_LUNGHEZZA   = 2
 NCSEC_COORDINATES = 3
 NCSEC_TOTAL       = 4
+MOTORE_UTENSILE   = 0
+MOTORE_LUNGHEZZA  = 1
+
 
 # @todo: move into config
 SEARCH_L385  = 'L385'
@@ -161,15 +164,44 @@ def read_template_raw(filename):
 		pass
 	else:
 		# @todo: report error
-		print("DEBUG: no template")
+		print("DEBUG: template '{}' non trovato".format(filename))
 	pass
 	return template, variables
 pass
 
-def read_and_process_template(filename, variable_database):
+def read_and_process_template(filename, variable_database, repeating_vars):
 	template, pending_vars = read_template_raw(filename)
 	for var in pending_vars:
-		if var in variable_database.keys():
+		if ':' in var:                                      # file references
+			var_segments = var.split(':')
+			if len(var_segments) > 2:
+				print("Errore: il riferimento a file '{}' nel template '{}' contiene due o più ':'".format(var, filename))
+				__SYNTAX_ERROR_FILE_REFERENCE
+			pass
+
+			repeat_count    = var_segments[0]
+			referenced_file = var_segments[1]
+			if referenced_file == filename:
+				print("ERRORE: il template '{}' contiene un riferimento a se stesso")
+				__ERROR_RECURSIVE_TEMPLATE
+			pass
+
+			referenced_template = ''
+			if repeat_count:
+				repeat_count = int(repeat_count)
+				if referenced_file not in repeating_vars.keys():
+					repeating_vars[referenced_file] = repeat_count
+				pass
+				if(repeating_vars[referenced_file]):
+					referenced_template = read_and_process_template(referenced_file, variable_database, repeating_vars)
+					repeating_vars[referenced_file] -= 1
+				pass
+			else:
+				referenced_template = read_and_process_template(referenced_file, variable_database, repeating_vars)
+			pass
+
+			template = template.replace('$'+var+'$', referenced_template)
+		elif var in variable_database.keys():               # variables
 			template = template.replace('$'+var+'$', variable_database[var])
 		pass
 	pass
@@ -267,7 +299,7 @@ def load_program_info(filename, content, config):
 	robot_id = ''
 	search_end_index = None
 	while not robot_id:
-		search = filename[:search_end_index].lower().rfind('r')
+		search = filename[:search_end_index].lower().rfind('r')                    # @todo: make configurable
 		if search >= 0:
 			robot_id = str_get_number_or_nothing(filename[search+1:])
 			search_end_index = search
@@ -465,12 +497,13 @@ def process(filename):
 			pass
 		pass
 
-		#print(config)
-
 		with open('out/' + filename, 'w') as fout:
-			all_vars = []
-			header = read_and_process_template('intestazione.template', config)
-			fout_content = header
+
+			fout_content = ''
+			utensili_utilizzati = [None, None, None]
+			repeating_vars = dict()                      # 'file.template' : n_of_repeats_left
+
+
 			for section in nc_sections:
 				#
 				# Parsing prima coordinata
@@ -502,7 +535,26 @@ def process(filename):
 				config['UTENSILE']          = section[NCSEC_UTENSILE]
 				config['COORDINATE']        = '\n'.join(section[NCSEC_COORDINATES][1:])
 
-				template = read_and_process_template('utensile.template', config)
+				#
+				# Raccolta informazioni utensili
+				# ================================================================================================
+				n_motore = int(section[NCSEC_MOTORE]) - 2
+				if (n_motore < 0) or (n_motore > 2):         # @todo: make configurable
+					___ERRORE_N_MOTORE_NON_VALIDO
+				elif ( (utensili_utilizzati[n_motore] != None) and \
+					   ( (utensili_utilizzati[n_motore][MOTORE_UTENSILE] != section[NCSEC_UTENSILE]) or \
+					     (utensili_utilizzati[n_motore][MOTORE_LUNGHEZZA] != section[NCSEC_LUNGHEZZA]))):
+					___ERRORE_N_MOTORE_DUPLICATO
+				pass
+				utensili_utilizzati[n_motore] = [None, None]
+				utensili_utilizzati[n_motore][MOTORE_UTENSILE]  = section[NCSEC_UTENSILE]
+				utensili_utilizzati[n_motore][MOTORE_LUNGHEZZA] = section[NCSEC_LUNGHEZZA]
+
+				#
+				# Parte programma per utensile
+				# ================================================================================================
+				template = read_and_process_template('utensile.template', config, repeating_vars)
+
 
 				config['LUNGHEZZAUTENSILE'] = '__ERRORE'
 				config['NUMEROMOTORE']      = '__ERRORE'
@@ -516,11 +568,33 @@ def process(filename):
 				config['PRIMAC'] = '__ERRORE'
 				fout_content += template
 			pass
-			footer = read_and_process_template('chiusura.template', config)
+			
+			#
+			# Preparazione testo utensili
+			# ================================================================================================
+			ut_text = ''
+			for n_mot in range(3):
+				if utensili_utilizzati[n_mot] != None:
+					ut_text += 'M{} {} L{} - '.format(n_mot+2, utensili_utilizzati[n_mot][0], utensili_utilizzati[n_mot][1])
+				pass
+			pass
+			if ut_text:
+				ut_text = ut_text[:-3]
+				config['UTENSILI'] = ut_text
+			pass
+
+			#
+			# Intestazione
+			# ================================================================================================
+			header = read_and_process_template('intestazione.template', config, repeating_vars)
+			fout_content = header + fout_content
+
+			#
+			# Chiusura
+			# ================================================================================================
+			footer = read_and_process_template('chiusura.template', config, repeating_vars)
 			fout_content += footer
 
-			#all_vars.extend(header_vars)
-			
 			fout.write(fout_content)
 		pass
 	pass
@@ -540,5 +614,4 @@ if __name__ == '__main__':
 			pass
 		pass
 	pass
-
 pass
