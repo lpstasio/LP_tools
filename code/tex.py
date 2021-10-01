@@ -20,14 +20,14 @@ _VERSION = 0
 #
 #
 # variabili configurazione:
-#            "_stringa_cliente"               : "CLIENTE",
-#            "_stringa_descrizione_pezzo"     : "DESCRIZIONE PEZZO",
-#            "_stringa_codice"                : "CODICE PEZZO",
-#            "_stringa_revisione"             : "REV",
-#            "_stringa_nome_programma"        : "NOTE"
-#            "_desc_max_lunghezza_prima_riga" : "34",
-#            "_desc_max_lunghezza"            : "45",
-#            "_formato_data"                  : "g.m.aaaa",
+#            "stringa_cliente"               : "CLIENTE",
+#            "stringa_descrizione_pezzo"     : "DESCRIZIONE PEZZO",
+#            "stringa_codice"                : "CODICE PEZZO",
+#            "stringa_revisione"             : "REV",
+#            "stringa_nome_programma"        : "NOTE"
+#            "desc_max_lunghezza_prima_riga" : "34",
+#            "desc_max_lunghezza"            : "45",
+#            "formato_data"                  : "g.m.aaaa",
 
 import os, glob
 from datetime import datetime
@@ -50,8 +50,22 @@ MARK_SECTION_START = '(TCP,'
 MARK_SECTION_END   = ['(TCP)', 'FINE PROGRAMMA']
 
 default_vars = {
-	'POSIZIONEDIMA' : 'XX',
+	'POSIZIONEDIMA'                  : 'XX',
+	'ORIGX'                          : '',
+	'ORIGY'                          : '',
+	'ORIGZ'                          : ''
 }
+default_config = {
+	"stringa_cliente"                      : "CLIENTE",
+	"stringa_descrizione_pezzo"            : "DESCRIZIONE PEZZO",
+	"stringa_codice"                       : "CODICE PEZZO",
+	"stringa_revisione"                    : "REV",
+	"stringa_nome_programma"               : "NOTE",
+	"descrizione_max_lunghezza_prima_riga" : "34",
+	"descrizione_max_lunghezza"            : "45",
+	"formato_data"                         : "g.m.aaaa"
+}
+
 
 def _str_get_number(s, ignore_before):
 	result = ''
@@ -70,13 +84,16 @@ def _str_get_number(s, ignore_before):
 	return result
 pass
 
+
 def str_get_number_ignore_any_before(s):
 	return _str_get_number(s, True)
 pass
 
+
 def str_get_number_or_nothing(s):
 	return _str_get_number(s, False)
 pass
+
 
 def str_get_coordinate(axis, line):
 	result = ''
@@ -96,6 +113,7 @@ def str_get_coordinate(axis, line):
 	pass
 	return result
 pass
+
 
 def str_get_value(s, identifier, separator = ':', end_token = '\n'):
 	value_start_index = s.find(identifier)
@@ -119,6 +137,7 @@ def str_get_value(s, identifier, separator = ':', end_token = '\n'):
 	return value_text
 pass
 
+
 def in_str(s, subst):
 	if (not isinstance(subst, list)) and (not isinstance(subst, tuple)):
 		subst = [subst] 
@@ -131,6 +150,7 @@ def in_str(s, subst):
 
 	return False
 pass
+
 
 def read_template_raw(filename):
 	template  = ''
@@ -168,6 +188,7 @@ def read_template_raw(filename):
 	pass
 	return template, variables
 pass
+
 
 def read_and_process_template(filename, variable_database, repeating_vars):
 	template, pending_vars = read_template_raw(filename)
@@ -208,78 +229,107 @@ def read_and_process_template(filename, variable_database, repeating_vars):
 	return template
 pass
 
-# @todo: fallback hardcoded variable defaults
-# @todo: robot specific variable override
-def load_conf(robot = 0):
+
+def parse_tex(filename):
 	vars = dict()
-	#
-	# Lettura Coordinate
-	# ================================================================================================
-	with open('config/variabili.conf', 'r') as vfile:
-		line_number = 0
-		for org_line in vfile.read().splitlines():
-			line_number += 1
 
-			line = org_line
-			comment_start = line.find(';')
-			if comment_start >= 0:
-				line = line[:comment_start].strip()
-			pass
+	if os.path.exists('config/' + filename):
+		with open('config/' + filename, 'r') as tfile:
+			line_number = 0
+			for org_line in tfile.read().splitlines():
+				line_number += 1
 
-			if line:
-				separator_index = line.find(':')
-				if separator_index < 0:
-					print("ERRORE: nessun ':' trovato;\n  config/variabili.conf[{}]: '{}'\n".\
-						  format(line_number, org_line))
-					__ERROR_VARIABLE_DEFINITION_SYNTAX_ERROR
+				line = org_line
+				comment_start = line.find(';')
+				if comment_start >= 0:
+					line = line[:comment_start].strip()
 				pass
 
-				var_name  = line[:separator_index].replace(' ', '')
-				var_value = line[separator_index + 1:].lstrip()
-				
-				if not var_name:
-					print("ERRORE: definizione variabile senza nome;\n  config/variabili.conf[{}]: '{}'\n".\
-						  format(line_number, org_line))
-					__ERROR_VARIABLE_DEFINITION_EMPTY_NAME
-				pass
-				
-				if var_name in vars.keys():
-					print("Attenzione: variabile precedentemente definita, il nuovo valore sarà ignorato;\n  config/variabili.conf[{}]: '{}'\n".\
-						  format(line_number, org_line))
-				else:
-					vars[var_name] = var_value
+				if line:
+					separator_index = line.find(':')
+					if separator_index < 0:
+						print("ERRORE: nessun ':' trovato;\n  config/{}""[{}]: '{}'\n".\
+							  format(filename, line_number, org_line))
+						__ERROR_VARIABLE_DEFINITION_SYNTAX_ERROR
+					pass
+
+					var_name  = line[:separator_index].replace(' ', '')
+					var_value = line[separator_index + 1:].lstrip()
+					
+					if not var_name:
+						print("ERRORE: definizione variabile senza nome;\n  config/{}[{}]: '{}'\n".\
+							  format(filename, line_number, org_line))
+						__ERROR_VARIABLE_DEFINITION_EMPTY_NAME
+					pass
+					
+					if var_name in vars.keys():
+						print("Attenzione: variabile precedentemente definita, il nuovo valore sarà ignorato;\n  config/{}[{}]: '{}'\n".\
+							  format(filename, line_number, org_line))
+					else:
+						vars[var_name] = var_value
+					pass
 				pass
 			pass
 		pass
 	pass
+	return vars
+pass
 
+
+def load_config():
+	#
+	# Lettura configurazione
+	# ================================================================================================
+	config = parse_tex('configurazione.tex')
+
+	#
+	# Inserimento valori default per variabili non specificate
+	# ================================================================================================
+	forced_config = default_config.copy()
+	forced_config.update(config)
+	config = forced_config
 
 	#
 	# Formattazione data
 	# ================================================================================================
-	vars['_formato_data'] = vars.get('_formato_data', 'GG.MM.AAAA').\
-							replace('aaaa',  '%Y').\
-							replace(  'aa',  '%y').\
-							replace(  'm',  '%m').\
-							replace(  'g',  '%d').\
-							replace(  'h',  '%I').\
-							replace(  'H',  '%H').\
-							replace(  'M',  '%M').\
-							replace(  's',  '%S')
-	vars['DATA'] = datetime.now().strftime(vars['_formato_data'])
+	date_format = config['formato_data']
+	date_format = date_format.\
+				  replace('aaaa',  '%Y').\
+				  replace(  'aa',  '%y').\
+				  replace(   'm',  '%m').\
+				  replace(   'g',  '%d').\
+				  replace(   'h',  '%I').\
+				  replace(   'H',  '%H').\
+				  replace(   'M',  '%M').\
+				  replace(   's',  '%S')
+	config['formato_data'] = date_format
 
-	forced_vars = {
-		"_stringa_cliente"               : "CLIENTE",
-		"_stringa_descrizione_pezzo"     : "DESCRIZIONE PEZZO",
-		"_desc_max_lunghezza_prima_riga" : "34",
-		"_desc_max_lunghezza"            : "45",
-		"_stringa_codice"                : "CODICE PEZZO",
-		"_stringa_revisione"             : "REV",
-		"_stringa_nome_programma"        : "NOTE"
-	}
-	forced_vars.update(vars)
-	return forced_vars
+	return config
 pass
+
+
+# @todo: robot specific variable override
+def load_vars(config, robot = 0):
+	#
+	# Lettura variabili
+	# ================================================================================================
+	vars = parse_tex('variabili.tex')
+	vars['DATA'] = datetime.now().strftime(config['formato_data'])
+
+	#
+	# Inserimento valori default per variabili non specificate
+	# ================================================================================================
+	forced_vars = default_vars.copy()
+	forced_vars.update(vars)
+	vars = forced_vars
+
+	if robot > 0:
+		vars.update(parse_tex('r{}/variabili.tex'.format(robot)))
+	pass
+
+	return vars
+pass
+
 
 def load_program_info(filename, content, config):
 	result = {
@@ -320,7 +370,7 @@ def load_program_info(filename, content, config):
 	#
 	# Cliente
 	# ================================================================================================
-	search = str_get_value(content, config['_stringa_cliente'])
+	search = str_get_value(content, config['stringa_cliente'])
 	if search:
 		result['CLIENTE'] = search.lower()
 
@@ -328,7 +378,7 @@ def load_program_info(filename, content, config):
 	# Descrizione
 	# ================================================================================================
 	descrizione = result['DESCRIZIONE_PRIMA_RIGA']
-	search = str_get_value(content, config['_stringa_descrizione_pezzo'])
+	search = str_get_value(content, config['stringa_descrizione_pezzo'])
 	if search:
 		descrizione = search.capitalize()
 
@@ -369,17 +419,17 @@ def load_program_info(filename, content, config):
 	#
 	# Codice
 	# ================================================================================================
-	search = str_get_value(content, config['_stringa_codice'])
+	search = str_get_value(content, config['stringa_codice'])
 	if search:
 		result['CODICE'] = search.upper()
 
 	#
 	# Revisione
 	# ================================================================================================
-	rev_search = content.find(config['_stringa_revisione'])
+	rev_search = content.find(config['stringa_revisione'])
 	rev_value = ''
 	if rev_search >= 0:
-		rev_search += len(config['_stringa_revisione'])
+		rev_search += len(config['stringa_revisione'])
 
 		# getting next alphanumeric
 		is_numeric = False
@@ -411,7 +461,7 @@ def load_program_info(filename, content, config):
 	#
 	# Nome programma
 	# ================================================================================================
-	search = str_get_value(content, config['_stringa_nome_programma'], ' ', '\n')
+	search = str_get_value(content, config['stringa_nome_programma'], ' ', '\n')
 	if search:
 		result['PROGRAMMA'] = search.upper()
 		if len(result['PROGRAMMA']) != 7:
@@ -427,8 +477,6 @@ def process(filename):
 		pass # @todo: prompt overwrite
 	pass
 
-	config = load_conf()
-
 	nc_sections = []
 	in_content = None
 	in_lines   = None
@@ -437,9 +485,17 @@ def process(filename):
 			in_content = fin.read()
 			in_lines = in_content.splitlines()
 
-			config.update(load_program_info(filename, in_content, config))
+			config = load_config()
+			vars   = load_program_info(filename, in_content, config)
+
+			robot  = vars['ROBOT']
+			if not robot:
+				robot = '0'
+			robot = int(robot)
+
+			vars.update(load_vars(config, robot))
 			
-			line_index             = 0
+			line_index             =  0
 			current_section_index  = -1
 			is_reading_coordinates = False
 			while line_index < len(in_lines):
@@ -482,7 +538,7 @@ def process(filename):
 				# ================================================================================================
 				search_index = line.find(SEARCH_L385)
 				if search_index >= 0:
-					nc_sections[current_section_index][NCSEC_LUNGHEZZA] = str_get_number_ignore_any_before(line[search_index + len(SEARCH_L385):]).rstrip('.0')
+					nc_sections[current_section_index][NCSEC_LUNGHEZZA] = str_get_number_ignore_any_before(line[search_index + len(SEARCH_L385):]).rstrip('0').rstrip('.')
 				pass
 
 				#
@@ -508,32 +564,32 @@ def process(filename):
 				#
 				# Parsing prima coordinata
 				# ================================================================================================
-				config['PRIMAX'] = str_get_coordinate('X', section[NCSEC_COORDINATES][0])
-				config['PRIMAY'] = str_get_coordinate('Y', section[NCSEC_COORDINATES][0])
-				config['PRIMAZ'] = str_get_coordinate('Z', section[NCSEC_COORDINATES][0])
-				config['PRIMAA'] = str_get_coordinate('A', section[NCSEC_COORDINATES][0])
-				config['PRIMAB'] = str_get_coordinate('B', section[NCSEC_COORDINATES][0])
-				config['PRIMAC'] = str_get_coordinate('C', section[NCSEC_COORDINATES][0])
-				if not config['PRIMAX']:
-					config['PRIMAX'] = 'INESISTENTE'
-				if not config['PRIMAY']:
-					config['PRIMAY'] = 'INESISTENTE'
-				if not config['PRIMAZ']:
-					config['PRIMAZ'] = 'INESISTENTE'
-				if not config['PRIMAA']:
-					config['PRIMAA'] = 'INESISTENTE'
-				if not config['PRIMAB']:
-					config['PRIMAB'] = 'INESISTENTE'
-				if not config['PRIMAC']:
-					config['PRIMAC'] = 'INESISTENTE'
+				vars['PRIMAX'] = str_get_coordinate('X', section[NCSEC_COORDINATES][0])
+				vars['PRIMAY'] = str_get_coordinate('Y', section[NCSEC_COORDINATES][0])
+				vars['PRIMAZ'] = str_get_coordinate('Z', section[NCSEC_COORDINATES][0])
+				vars['PRIMAA'] = str_get_coordinate('A', section[NCSEC_COORDINATES][0])
+				vars['PRIMAB'] = str_get_coordinate('B', section[NCSEC_COORDINATES][0])
+				vars['PRIMAC'] = str_get_coordinate('C', section[NCSEC_COORDINATES][0])
+				if not vars['PRIMAX']:
+					vars['PRIMAX'] = 'INESISTENTE'
+				if not vars['PRIMAY']:
+					vars['PRIMAY'] = 'INESISTENTE'
+				if not vars['PRIMAZ']:
+					vars['PRIMAZ'] = 'INESISTENTE'
+				if not vars['PRIMAA']:
+					vars['PRIMAA'] = 'INESISTENTE'
+				if not vars['PRIMAB']:
+					vars['PRIMAB'] = 'INESISTENTE'
+				if not vars['PRIMAC']:
+					vars['PRIMAC'] = 'INESISTENTE'
 
 				#
 				# Compilazione informazioni sezione
 				# ================================================================================================
-				config['LUNGHEZZAUTENSILE'] = section[NCSEC_LUNGHEZZA]
-				config['NUMEROMOTORE']      = section[NCSEC_MOTORE]
-				config['UTENSILE']          = section[NCSEC_UTENSILE]
-				config['COORDINATE']        = '\n'.join(section[NCSEC_COORDINATES][1:])
+				vars['LUNGHEZZAUTENSILE'] = section[NCSEC_LUNGHEZZA]
+				vars['NUMEROMOTORE']      = section[NCSEC_MOTORE]
+				vars['UTENSILE']          = section[NCSEC_UTENSILE]
+				vars['COORDINATE']        = '\n'.join(section[NCSEC_COORDINATES][1:])
 
 				#
 				# Raccolta informazioni utensili
@@ -553,19 +609,19 @@ def process(filename):
 				#
 				# Parte programma per utensile
 				# ================================================================================================
-				template = read_and_process_template('utensile.template', config, repeating_vars)
+				template = read_and_process_template('utensile.template', vars, repeating_vars)
 
 
-				config['LUNGHEZZAUTENSILE'] = '__ERRORE'
-				config['NUMEROMOTORE']      = '__ERRORE'
-				config['UTENSILE']          = '__ERRORE'
-				config['COORDINATE']        = '__ERRORE'
-				config['PRIMAX'] = '__ERRORE'
-				config['PRIMAY'] = '__ERRORE'
-				config['PRIMAZ'] = '__ERRORE'
-				config['PRIMAA'] = '__ERRORE'
-				config['PRIMAB'] = '__ERRORE'
-				config['PRIMAC'] = '__ERRORE'
+				vars['LUNGHEZZAUTENSILE'] = '__ERRORE'
+				vars['NUMEROMOTORE']      = '__ERRORE'
+				vars['UTENSILE']          = '__ERRORE'
+				vars['COORDINATE']        = '__ERRORE'
+				vars['PRIMAX'] = '__ERRORE'
+				vars['PRIMAY'] = '__ERRORE'
+				vars['PRIMAZ'] = '__ERRORE'
+				vars['PRIMAA'] = '__ERRORE'
+				vars['PRIMAB'] = '__ERRORE'
+				vars['PRIMAC'] = '__ERRORE'
 				fout_content += template
 			pass
 			
@@ -580,19 +636,19 @@ def process(filename):
 			pass
 			if ut_text:
 				ut_text = ut_text[:-3]
-				config['UTENSILI'] = ut_text
+				vars['UTENSILI'] = ut_text
 			pass
 
 			#
 			# Intestazione
 			# ================================================================================================
-			header = read_and_process_template('intestazione.template', config, repeating_vars)
+			header = read_and_process_template('intestazione.template', vars, repeating_vars)
 			fout_content = header + fout_content
 
 			#
 			# Chiusura
 			# ================================================================================================
-			footer = read_and_process_template('chiusura.template', config, repeating_vars)
+			footer = read_and_process_template('chiusura.template', vars, repeating_vars)
 			fout_content += footer
 
 			fout.write(fout_content)

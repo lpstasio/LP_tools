@@ -1,5 +1,5 @@
 ;
-M2$NUMEROMOTORE$ S$VELOCITAROTAZIONEFRESA$$2:inizio_programma.template$
+M2$NUMEROMOTORE$ S$VELOCITAROTAZIONEFRESA$$1:inizio_programma.template$
 ;
 ; ================================== M$NUMEROMOTORE$ $UTENSILE$ =====================================
 G90 G0 X$PRIMAX$ Y$PRIMAY$ A$PRIMAA$ B$PRIMAB$
