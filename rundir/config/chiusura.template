@@ -1,0 +1,14 @@
+;
+(TCP)
+;
+(UAO,0)
+;
+G90 G0 Z0
+G90 G0 Y$SAFETY_Y$
+;
+A0 B0
+;
+X0 Y0 Z0
+;
+M5
+;
