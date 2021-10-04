@@ -1,19 +1,23 @@
 # TEXporter
-_VERSION = 0
+_VERSION = 1
 
 # CHANGELOG
 #   v0: Riconosce le diverse sezioni di cui è composto il programma.
 #        Per 'sezione' si intende una parte di programma che va da un'attivazione del tcp alla successiva disattivazione;
 #        ogni sezione è caratterizzata da un motore, un utensile e una lunghezza utensile
+#   v1: Configurabile
+#       Ottimizzazione link
 # PLANNED
 #   config: robots
 #           L385/L386 substitutes?
 #           config compiler
-#           custom variables
 #           IMPORTANT: when compiling config, if no 'PRIMAX/Y/Z/A/B' is used, warn and keep first coordinate
 #           add C axis support
-#           revision alpha/numeric mix
+#           revision alpha/numeric mix?
 #           robot directive ('r2') preferred position (on the right or on the left)
+#           optional programmer name directive
+#           r3 link in G1
+#           spacing(XYZABCF, G?)
 #
 #
 #
@@ -28,6 +32,10 @@ _VERSION = 0
 #            "desc_max_lunghezza_prima_riga" : "34",
 #            "desc_max_lunghezza"            : "45",
 #            "formato_data"                  : "g.m.aaaa",
+#
+#            righe_numerate:                 1
+#            numerazione_righe_sulla_destra: 1
+#            mantieni_prima_coordinata:      0
 
 import os, glob
 from datetime import datetime
@@ -63,7 +71,11 @@ default_config = {
 	"stringa_nome_programma"               : "NOTE",
 	"descrizione_max_lunghezza_prima_riga" : "34",
 	"descrizione_max_lunghezza"            : "45",
-	"formato_data"                         : "g.m.aaaa"
+	"formato_data"                         : "g.m.aaaa",
+	"righe_numerate"                       :  "1",
+	"numerazione_righe_sulla_destra"       :  "1",
+	"mantieni_prima_coordinata"            :  "0",
+	"ottimizza_link"                       :  "1",
 }
 
 
@@ -295,12 +307,54 @@ def load_config():
 	# ================================================================================================
 	config = parse_tex('configurazione.tex')
 
+	for key in config.keys():
+		if not key in default_config.keys():
+			print("Attenzione: variabile di configurazione '{}' non riconosciuta; sarà ignorata".format(key))
+		pass
+	pass
+
 	#
 	# Inserimento valori default per variabili non specificate
 	# ================================================================================================
 	forced_config = default_config.copy()
 	forced_config.update(config)
 	config = forced_config
+
+	#
+	# Controllo tipi variabili
+	# ================================================================================================
+	test_var = 'righe_numerate'
+	if config[test_var].isnumeric():
+		config[test_var] = bool(int(config[test_var]))
+	else:
+		print("Errore: la variabile '{}' dev'essere '0' o '1'".format(test_var))
+		__ERROR_VARIABLE_FORMAT
+	pass
+
+	test_var = 'numerazione_righe_sulla_destra'
+	if config[test_var].isnumeric():
+		config[test_var] = bool(int(config[test_var]))
+	else:
+		print("Errore: la variabile '{}' dev'essere '0' o '1'".format(test_var))
+		__ERROR_VARIABLE_FORMAT
+	pass
+
+	test_var = 'mantieni_prima_coordinata'
+	if config[test_var].isnumeric():
+		config[test_var] = bool(int(config[test_var]))
+	else:
+		print("Errore: la variabile '{}' dev'essere '0' o '1'".format(test_var))
+		__ERROR_VARIABLE_FORMAT
+	pass
+
+	test_var = 'ottimizza_link'
+	if config[test_var].isnumeric():
+		config[test_var] = bool(int(config[test_var]))
+	else:
+		print("Errore: la variabile '{}' dev'essere '0' o '1'".format(test_var))
+		__ERROR_VARIABLE_FORMAT
+	pass
+
 
 	#
 	# Formattazione data
@@ -484,7 +538,7 @@ def load_program_info(filename, content, config):
 	return result
 pass
 
-def process(filename):
+def process(filename, config):
 	should_overwrite = True
 	if os.path.exists('out/' + filename):
 		pass # @todo: prompt overwrite
@@ -493,14 +547,13 @@ def process(filename):
 	nc_sections = []
 	in_content = None
 	in_lines   = None
+	line_number = 1
 	if should_overwrite:
 		with open('in/' + filename,'r') as fin:
 			in_content = fin.read()
 			in_lines = in_content.splitlines()
 
-			config = load_config()
 			vars   = load_program_info(filename, in_content, config)
-
 			robot  = vars['ROBOT']
 			if not robot:
 				robot = '0'
@@ -510,6 +563,7 @@ def process(filename):
 			
 			line_index             =  0
 			current_section_index  = -1
+			link_lines             = []
 			is_reading_coordinates = False
 			while line_index < len(in_lines):
 				line = in_lines[line_index]
@@ -521,6 +575,63 @@ def process(filename):
 					if in_str(line, MARK_SECTION_END):
 						is_reading_coordinates = False
 					else:
+						#
+						# Rimozione Nxx a inizio riga
+						# ================================================================================================
+						if line[0] == 'N':
+							removee = 'N'
+							removee += str_get_number_or_nothing(line[1:])
+							line = line.replace(removee, '').strip()
+						pass
+						
+						#
+						# Numerazione riga
+						# ================================================================================================
+						if config['righe_numerate']:
+							line_number_str = 'N' + str(line_number)
+							if config['numerazione_righe_sulla_destra']:
+								padding = 70 - len(line_number_str) - len(line)
+								if padding < 0:
+									padding = 5
+								pass
+								line += ' '*padding + line_number_str
+							else:
+								padding = 6 - len(line_number_str)
+								if padding <= 0:
+									padding = 2
+								pass
+								line = line_number_str + padding * ' ' + line
+							pass
+							line_number += 1
+						pass
+
+						#
+						# Ottimizzazione link
+						# ================================================================================================
+						if config['ottimizza_link']:
+							if 'FINE LINK' in line:
+								test_line = nc_sections[current_section_index][NCSEC_COORDINATES].pop()
+								while 'INIZIO LINK' not in test_line:
+									link_lines = [test_line] + link_lines
+									if 'Z' in test_line:
+										nc_sections[current_section_index][NCSEC_COORDINATES].extend(link_lines)
+										link_lines = []
+										break
+									pass
+									test_line  = nc_sections[current_section_index][NCSEC_COORDINATES].pop()
+								pass
+
+								if len(link_lines) > 0:
+									nc_sections[current_section_index][NCSEC_COORDINATES].append(test_line)
+									nc_sections[current_section_index][NCSEC_COORDINATES].append(link_lines[-1])
+									link_lines = []
+								pass
+							pass
+						pass
+
+						#
+						# Aggiunta riga al set di coordinate
+						# ================================================================================================
 						nc_sections[current_section_index][NCSEC_COORDINATES].append(line)
 					pass
 				elif in_str(line, MARK_SECTION_START):
@@ -602,13 +713,20 @@ def process(filename):
 				vars['LUNGHEZZAUTENSILE'] = section[NCSEC_LUNGHEZZA]
 				vars['NUMEROMOTORE']      = section[NCSEC_MOTORE]
 				vars['UTENSILE']          = section[NCSEC_UTENSILE]
-				vars['COORDINATE']        = '\n'.join(section[NCSEC_COORDINATES][1:])
+
+				coordinates_start = 1
+				if config['mantieni_prima_coordinata']:
+					coordinates_start = None
+				pass
+
+				vars['COORDINATE']        = '\n'.join(section[NCSEC_COORDINATES][coordinates_start:])
+
 
 				#
 				# Raccolta informazioni utensili
 				# ================================================================================================
 				n_motore = int(section[NCSEC_MOTORE]) - 2
-				if (n_motore < 0) or (n_motore > 2):         # @todo: make configurable
+				if (n_motore < 0) or (n_motore > 2):                                   # @todo: make configurable
 					___ERRORE_N_MOTORE_NON_VALIDO
 				elif ( (utensili_utilizzati[n_motore] != None) and \
 					   ( (utensili_utilizzati[n_motore][MOTORE_UTENSILE] != section[NCSEC_UTENSILE]) or \
@@ -672,14 +790,15 @@ pass
 if __name__ == '__main__':
 	print("TEXporter v{}".format(_VERSION))
 
-	paths = glob.glob('in/*')
+	paths  = glob.glob('in/*')
+	config = load_config()
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 	for path in paths:
 		if not os.path.isdir(path):
 			filename = os.path.basename(path)
 			if not ('maschera' in filename.lower()):
-				process(filename)
+				process(filename, config)
 			pass
 		pass
 	pass
