@@ -7,6 +7,10 @@ _VERSION = 1
 #        ogni sezione è caratterizzata da un motore, un utensile e una lunghezza utensile
 #   v1: Configurabile
 #       Ottimizzazione link
+#       Spaziatura coordinate
+#       Padding numeri righe
+#       Posizioni dima configurabili
+#
 # PLANNED
 #   config: robots
 #           L385/L386 substitutes?
@@ -17,7 +21,6 @@ _VERSION = 1
 #           robot directive ('r2') preferred position (on the right or on the left)
 #           optional programmer name directive
 #           r3 link in G1
-#           spacing(XYZABCF, G?)
 #
 #
 #
@@ -35,7 +38,11 @@ _VERSION = 1
 #
 #            righe_numerate:                 1
 #            numerazione_righe_sulla_destra: 1
+#            distanza_numeri_righe:          70
 #            mantieni_prima_coordinata:      0
+#            ottimizza_link:                 1
+#            sostituisci_g00_g01:            1
+#            numero_spazi_tra_coordinate:    2
 
 import os, glob
 from datetime import datetime
@@ -57,11 +64,15 @@ SEARCH_DISCO = 'FRESA SFERICA'
 MARK_SECTION_START = '(TCP,'
 MARK_SECTION_END   = ['(TCP)', 'FINE PROGRAMMA']
 
+X_INDEX = 0
+Y_INDEX = 1
+Z_INDEX = 2
+
 default_vars = {
-	'POSIZIONEDIMA'                  : 'XX',
 	'ORIGX'                          : '',
 	'ORIGY'                          : '',
-	'ORIGZ'                          : ''
+	'ORIGZ'                          : '',
+	'VELOCITAROTAZIONEFRESA'         : '19000',
 }
 default_config = {
 	"stringa_cliente"                      : "CLIENTE",
@@ -74,10 +85,17 @@ default_config = {
 	"formato_data"                         : "g.m.aaaa",
 	"righe_numerate"                       :  "1",
 	"numerazione_righe_sulla_destra"       :  "1",
+	"distanza_numeri_righe"                :  "70",
 	"mantieni_prima_coordinata"            :  "0",
 	"ottimizza_link"                       :  "1",
+	"sostituisci_g00_g01"                  :  "1",
+	"numero_spazi_tra_coordinate"          :  "2",
 }
 
+
+def str_insert(s, insert, index):
+	return insert.join([s[:index], s[index:]])
+pass
 
 def _str_get_number(s, ignore_before):
 	result = ''
@@ -301,6 +319,25 @@ def parse_tex(filename):
 pass
 
 
+def config_make_bool(config, name):
+	if config[name].isnumeric():
+		config[name] = bool(int(config[name]))
+	else:
+		print("Errore: la variabile '{}' dev'essere '0' o '1'".format(name))
+		__ERROR_VARIABLE_FORMAT_BOOL
+	pass
+pass
+
+def config_make_int(config, name):
+	if config[name].isnumeric() or (config[name][0] == '-' and config[name][1:].isnumeric()):
+		config[name] = int(config[name])
+	else:
+		print("Errore: la variabile '{}' dev'essere un numero".format(name))
+		__ERROR_VARIABLE_FORMAT_BOOL
+	pass
+pass
+
+
 def load_config():
 	#
 	# Lettura configurazione
@@ -323,37 +360,14 @@ def load_config():
 	#
 	# Controllo tipi variabili
 	# ================================================================================================
-	test_var = 'righe_numerate'
-	if config[test_var].isnumeric():
-		config[test_var] = bool(int(config[test_var]))
-	else:
-		print("Errore: la variabile '{}' dev'essere '0' o '1'".format(test_var))
-		__ERROR_VARIABLE_FORMAT
-	pass
+	config_make_bool(config, 'righe_numerate')
+	config_make_bool(config, 'numerazione_righe_sulla_destra')
+	config_make_bool(config, 'mantieni_prima_coordinata')
+	config_make_bool(config, 'ottimizza_link')
+	config_make_bool(config, 'sostituisci_g00_g01')
 
-	test_var = 'numerazione_righe_sulla_destra'
-	if config[test_var].isnumeric():
-		config[test_var] = bool(int(config[test_var]))
-	else:
-		print("Errore: la variabile '{}' dev'essere '0' o '1'".format(test_var))
-		__ERROR_VARIABLE_FORMAT
-	pass
-
-	test_var = 'mantieni_prima_coordinata'
-	if config[test_var].isnumeric():
-		config[test_var] = bool(int(config[test_var]))
-	else:
-		print("Errore: la variabile '{}' dev'essere '0' o '1'".format(test_var))
-		__ERROR_VARIABLE_FORMAT
-	pass
-
-	test_var = 'ottimizza_link'
-	if config[test_var].isnumeric():
-		config[test_var] = bool(int(config[test_var]))
-	else:
-		print("Errore: la variabile '{}' dev'essere '0' o '1'".format(test_var))
-		__ERROR_VARIABLE_FORMAT
-	pass
+	config_make_int(config, 'distanza_numeri_righe')
+	config_make_int(config, 'numero_spazi_tra_coordinate')
 
 
 	#
@@ -397,6 +411,119 @@ def load_vars(config, robot = 0):
 	return vars
 pass
 
+def _parse_origin(path, s):
+	result = dict()
+
+	for piece in s.split(')'):
+		if piece:
+			start = piece.find('(')
+			if start < 0:
+				print("ERRORE: parentesi non aperta in '{}': {}".format(path, s))
+				__SYNTAX_ERROR_ORIGIN_FILE_PARENTHESIS
+			pass
+
+			piece = piece[start+1:]
+
+			if ',' not in piece:
+				result['default'] = piece
+			else:
+				piece = piece.split(',')
+				result[piece[0].strip()] = piece[1].strip()
+			pass
+		pass
+	pass
+	if len(result) == 0:
+		result = None
+	pass
+	return result
+pass
+
+def load_origins():
+	result = []
+	
+	for path in glob.iglob('config/[Rr][0-9]*/origini.tex'):
+		robot_str = os.path.basename(os.path.dirname(path))
+		if robot_str.lower()[0] == 'r':
+			robot_str = robot_str[1:]
+			if robot_str.isnumeric():
+				robot = int(robot_str)
+				
+
+				if len(result) <= robot:
+					extension_length = robot - len(result) + 1
+					result.extend([None] * extension_length)
+				pass
+				result[robot] = [None, None, None]
+
+				current_axis  = -1
+				axes_lines = ['', '', '']
+				with open(path, 'r') as fin:
+					content = fin.read()
+					if 'X' in content:
+						result[robot][X_INDEX] = dict()
+					pass
+					if 'Y' in content:
+						result[robot][Y_INDEX] = dict()
+					pass
+					if 'Z' in content:
+						result[robot][Z_INDEX] = ''
+					pass
+
+					lines = content.splitlines()
+					for i in range(len(lines)):
+						line = lines[i]
+
+						comment_start = line.find(';')
+						if comment_start >= 0:
+							line = line[:comment_start].strip()
+						pass
+
+							
+						if ';' in line:
+							print(line, current_axis)
+						colon = line.find(':')
+						if colon >= 0:
+							before_colon = line[:colon]
+							line = line[colon+1:].strip()
+
+							if 'X' in before_colon:
+								current_axis = X_INDEX
+							elif 'Y' in before_colon:
+								current_axis = Y_INDEX
+							elif 'Z' in before_colon:
+								current_axis = Z_INDEX
+							else:
+								print("ERRORE: nessun asse specificato nella riga {} del file '{}'".format(i, path))
+								__SYNTAX_ERROR_ORIGIN_FILE
+							pass
+						pass
+						
+						if line.strip():
+							if current_axis < 0:
+								print("ERRORE in '{}[{}]': coordinate specificate prima di definire un asse".format(path, i))
+								__SYNTAX_ERROR_ORIGIN_FILE
+							pass
+
+							axes_lines[current_axis] += line
+						pass
+					pass
+
+
+					# PARSING COORDINATES
+					result[robot][X_INDEX] = _parse_origin(path, axes_lines[X_INDEX])
+					result[robot][Y_INDEX] = _parse_origin(path, axes_lines[Y_INDEX])
+					result[robot][Z_INDEX] = _parse_origin(path, axes_lines[Z_INDEX])
+					if result[robot] == [None, None, None]:
+						result[robot] = None
+					pass
+				pass
+			pass
+		pass
+	pass
+
+	return result
+pass
+
 
 def load_program_info(filename, content, config):
 	result = {
@@ -413,10 +540,11 @@ def load_program_info(filename, content, config):
 	#
 	# Robot
 	# ================================================================================================
+	dima_pos_start_index = None
 	robot_id = ''
 	search_end_index = None
 	while not robot_id:
-		search = filename[:search_end_index].lower().rfind('r')                    # @todo: make configurable
+		search = filename[:search_end_index].lower().rfind('r')
 		if search >= 0:
 			robot_id = str_get_number_or_nothing(filename[search+1:])
 			search_end_index = search
@@ -427,12 +555,45 @@ def load_program_info(filename, content, config):
 		if robot_id:
 			robot_id = robot_id.rstrip('.')
 			as_number = int(robot_id)
-			if ('.' in robot_id) or (as_number < 0) or (as_number > 100):
+			if ('.' in robot_id) or (as_number < 0) or (as_number > 100):                    # @todo: make configurable
 				robot_id = ''
+			else:
+				dima_pos_start_index = filename.find('(', search)
+				if dima_pos_start_index < 0:
+					dima_pos_start_index = None
+				pass
 			pass
 		pass
 	if robot_id:
 		result['ROBOT'] = robot_id
+	pass
+
+
+	#
+	# Posizione dima
+	# ================================================================================================
+	if dima_pos_start_index:
+		dima_pos_end_index = filename.find(')', dima_pos_start_index)
+		if dima_pos_end_index > 0:
+			pos_text = filename[dima_pos_start_index+1:dima_pos_end_index].strip()
+			if (pos_text) and \
+				(len(pos_text) == 2):
+
+				letter = ''
+				number = str_get_number_ignore_any_before(pos_text)
+				if ((len(number)) > 1) and ('0' in number):
+					letter = '0'
+					number = pos_text.replace('0', '')
+				elif number.isdigit():
+					letter = pos_text.replace(number, '')
+				pass
+
+				if ((letter.isalpha()) or (letter == '0')) and number.isdigit():
+					result['POSIZIONEDIMA'] = number + letter
+				pass
+			pass
+		pass
+	pass
 
 	#
 	# Cliente
@@ -538,7 +699,7 @@ def load_program_info(filename, content, config):
 	return result
 pass
 
-def process(filename, config):
+def process(filename, config, origins):
 	should_overwrite = True
 	if os.path.exists('out/' + filename):
 		pass # @todo: prompt overwrite
@@ -560,6 +721,33 @@ def process(filename, config):
 			robot = int(robot)
 
 			vars.update(load_vars(config, robot))
+			if 'POSIZIONEDIMA' in vars.keys():
+				if (robot < (len(origins) + 1)) and (origins[robot]):
+					pos = vars['POSIZIONEDIMA']
+					number = pos[0]
+					letter = pos[1]
+
+					if origins[robot][Z_INDEX]:
+						vars['ORIGZ'] = origins[robot][Z_INDEX]['default']
+					pass
+
+					if origins[robot][X_INDEX]:
+						if letter in origins[robot][X_INDEX].keys():
+							vars['ORIGX'] = origins[robot][X_INDEX][letter]
+						pass
+					pass
+
+					if origins[robot][Y_INDEX]:
+						if number in origins[robot][Y_INDEX].keys():
+							vars['ORIGY'] = origins[robot][Y_INDEX][number]
+						pass
+					pass
+
+					print(pos, vars['ORIGX'], vars['ORIGY'], vars['ORIGZ'])
+				pass
+			else:
+				vars['POSIZIONEDIMA'] = ''
+			pass
 			
 			line_index             =  0
 			current_section_index  = -1
@@ -585,27 +773,6 @@ def process(filename, config):
 						pass
 						
 						#
-						# Numerazione riga
-						# ================================================================================================
-						if config['righe_numerate']:
-							line_number_str = 'N' + str(line_number)
-							if config['numerazione_righe_sulla_destra']:
-								padding = 70 - len(line_number_str) - len(line)
-								if padding < 0:
-									padding = 5
-								pass
-								line += ' '*padding + line_number_str
-							else:
-								padding = 6 - len(line_number_str)
-								if padding <= 0:
-									padding = 2
-								pass
-								line = line_number_str + padding * ' ' + line
-							pass
-							line_number += 1
-						pass
-
-						#
 						# Ottimizzazione link
 						# ================================================================================================
 						if config['ottimizza_link']:
@@ -628,6 +795,60 @@ def process(filename, config):
 								pass
 							pass
 						pass
+
+						#
+						# G00, G01 -> G0, G1
+						# ================================================================================================
+						if config['sostituisci_g00_g01']:
+							line = line.replace('G00', 'G0')
+							line = line.replace('G01', 'G1')
+						pass
+
+						#
+						# Spaziatura coordinate
+						# ================================================================================================
+						if config['numero_spazi_tra_coordinate'] > 0:
+							n_spaces = config['numero_spazi_tra_coordinate']
+
+							indices = []
+							was_numeric = False
+							for i in range(len(line)):
+								if line[i].isnumeric() or line[i] == '.':
+									was_numeric = True
+								elif line[i].isalpha():
+									if was_numeric:
+										indices = [i] + indices
+									pass
+									was_numeric = False
+								pass
+							pass
+
+							for i in indices:
+								line = str_insert(line, ' '*n_spaces, i)
+							pass
+						pass
+
+						#
+						# Numerazione riga
+						# ================================================================================================
+						if config['righe_numerate']:
+							line_number_str = 'N' + str(line_number)
+							if config['numerazione_righe_sulla_destra']:
+								padding = config['distanza_numeri_righe'] - len(line_number_str) - len(line)
+								if padding < 0:
+									padding = 5
+								pass
+								line += ' '*padding + line_number_str
+							else:
+								padding = config['distanza_numeri_righe']- len(line_number_str)
+								if padding <= 0:
+									padding = 2
+								pass
+								line = line_number_str + padding * ' ' + line
+							pass
+							line_number += 1
+						pass
+
 
 						#
 						# Aggiunta riga al set di coordinate
@@ -790,15 +1011,16 @@ pass
 if __name__ == '__main__':
 	print("TEXporter v{}".format(_VERSION))
 
-	paths  = glob.glob('in/*')
-	config = load_config()
+	paths   = glob.glob('in/*')
+	config  = load_config()
+	origins = load_origins()
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 	for path in paths:
 		if not os.path.isdir(path):
 			filename = os.path.basename(path)
 			if not ('maschera' in filename.lower()):
-				process(filename, config)
+				process(filename, config, origins)
 			pass
 		pass
 	pass
