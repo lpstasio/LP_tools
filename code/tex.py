@@ -21,6 +21,7 @@ _VERSION = 1
 #           robot directive ('r2') preferred position (on the right or on the left)
 #           optional programmer name directive
 #           r3 link in G1
+#           allow empty variables
 #
 #
 #
@@ -478,9 +479,6 @@ def load_origins():
 							line = line[:comment_start].strip()
 						pass
 
-							
-						if ';' in line:
-							print(line, current_axis)
 						colon = line.find(':')
 						if colon >= 0:
 							before_colon = line[:colon]
@@ -699,16 +697,27 @@ def load_program_info(filename, content, config):
 	return result
 pass
 
-def process(filename, config, origins):
+def process(filename, config, origins, ui_padding):
 	should_overwrite = True
 	if os.path.exists('out/' + filename):
 		pass # @todo: prompt overwrite
 	pass
 
+	prompt_text = filename + ' '*(ui_padding + 2)
+
 	nc_sections = []
 	in_content = None
 	in_lines   = None
 	line_number = 1
+	if os.path.exists('out/' + filename):
+		prompt_text = "Il file '" + filename + "' esiste nella cartella 'out', sovrascrivere? [Sn] "
+		choice = input(prompt_text)
+		should_overwrite = ((choice) and (choice[0].lower() == 's'))
+		prompt_length = len(prompt_text)
+		if choice:
+			prompt_length += len(choice)
+		print('\033[1A\r' + ' ' * prompt_length + '\r', end='')
+		#print('\b' * prompt_length, end='')
 	if should_overwrite:
 		with open('in/' + filename,'r') as fin:
 			in_content = fin.read()
@@ -718,6 +727,18 @@ def process(filename, config, origins):
 			robot  = vars['ROBOT']
 			if not robot:
 				robot = '0'
+				prompt_text += ' '*9                                                       ## ui prompt
+			else:
+				padding = 2 - len(robot)                                                   ## ui prompt
+				prompt_text += ' '*padding + '<R' + robot + '> '
+
+				pos_dima = vars.get('POSIZIONEDIMA', '')
+				if pos_dima:
+					prompt_text += pos_dima + ' '
+				else:
+					prompt_text += ' '*3
+				pass
+			pass
 			robot = int(robot)
 
 			vars.update(load_vars(config, robot))
@@ -742,8 +763,6 @@ def process(filename, config, origins):
 							vars['ORIGY'] = origins[robot][Y_INDEX][number]
 						pass
 					pass
-
-					print(pos, vars['ORIGX'], vars['ORIGY'], vars['ORIGZ'])
 				pass
 			else:
 				vars['POSIZIONEDIMA'] = ''
@@ -991,6 +1010,8 @@ def process(filename, config, origins):
 				vars['UTENSILI'] = ut_text
 			pass
 
+			prompt_text += '(' + ut_text + ')'
+
 			#
 			# Intestazione
 			# ================================================================================================
@@ -1006,22 +1027,36 @@ def process(filename, config, origins):
 			fout.write(fout_content)
 		pass
 	pass
+	print(prompt_text)
 pass
 
 if __name__ == '__main__':
-	print("TEXporter v{}".format(_VERSION))
+	print("TEXporter v{}\n".format(_VERSION))
 
 	paths   = glob.glob('in/*')
 	config  = load_config()
 	origins = load_origins()
 	if not os.path.exists('out'):
 	    os.makedirs('out')
+
+	max_filename_len = 0
+	for path in paths:
+		if not os.path.isdir(path):
+			this_len = len(os.path.basename(path))
+			if this_len > max_filename_len:
+				max_filename_len = this_len
+			pass
+		pass
+	pass
+
 	for path in paths:
 		if not os.path.isdir(path):
 			filename = os.path.basename(path)
 			if not ('maschera' in filename.lower()):
-				process(filename, config, origins)
+				process(filename, config, origins, max_filename_len - len(filename))
 			pass
 		pass
 	pass
+
+	input("\n\nPremere invio per chiudere...")
 pass
