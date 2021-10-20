@@ -1061,15 +1061,11 @@ pass
 if __name__ == '__main__':
 	print("TEXporter v{}\n".format(_VERSION))
 
-	print('A')
-
 	paths   = glob.glob('in/*')
 	config  = load_config()
 	origins = load_origins()
 	if not os.path.exists('out'):
 	    os.makedirs('out')
-
-	print('B')
 
 	max_filename_len = 0
 	for path in paths:
@@ -1080,8 +1076,6 @@ if __name__ == '__main__':
 			pass
 		pass
 	pass
-
-	print('C')
 
 	for path in paths:
 		if not os.path.isdir(path):
