@@ -1,5 +1,5 @@
 # TEXporter
-_VERSION = 1
+_VERSION = 2
 
 # CHANGELOG
 #   v0: Riconosce le diverse sezioni di cui è composto il programma.
@@ -10,6 +10,7 @@ _VERSION = 1
 #       Spaziatura coordinate
 #       Padding numeri righe
 #       Posizioni dima configurabili
+#   v2: UX migliorata
 #
 # PLANNED
 #   config: robots
@@ -45,7 +46,7 @@ _VERSION = 1
 #            sostituisci_g00_g01:            1
 #            numero_spazi_tra_coordinate:    2
 
-import os, glob
+import os, glob, keyboard
 from datetime import datetime
 
 NCSEC_MOTORE      = 0
@@ -180,6 +181,19 @@ def in_str(s, subst):
 	pass
 
 	return False
+pass
+
+
+def str_is_button_in_hotkey(hotkey, button):
+	result = False
+	for key in hotkey.split('+'):
+		print(key, end = ',')
+		if key.lower() == button.lower():
+			result = True
+			break
+		pass
+	pass
+	return result
 pass
 
 
@@ -703,22 +717,35 @@ def process(filename, config, origins, ui_padding):
 		pass # @todo: prompt overwrite
 	pass
 
-	prompt_text = filename + ' '*(ui_padding + 2)
+	ui_text = ''
 
 	nc_sections = []
 	in_content = None
 	in_lines   = None
 	line_number = 1
 	if os.path.exists('out/' + filename):
+		should_overwrite = None
 		prompt_text = "Il file '" + filename + "' esiste nella cartella 'out', sovrascrivere? [Sn] "
-		choice = input(prompt_text)
-		should_overwrite = ((choice) and (choice[0].lower() == 's'))
+		print(prompt_text, end='', flush=True)
+
+		while should_overwrite == None:
+			event = keyboard.read_event()
+			if event.event_type == 'up':
+				if event.name.lower() == 's':
+					should_overwrite = True
+				elif event.name.lower() == 'n':
+					should_overwrite = False
+				pass
+			pass
+		pass
+
 		prompt_length = len(prompt_text)
-		if choice:
-			prompt_length += len(choice)
-		print('\033[1A\r' + ' ' * prompt_length + '\r', end='')
+		#print('\033[1A\r' + ' ' * prompt_length + '\r', end='')
+		print('\r' + ' '*prompt_length + '\r',end='')
 		#print('\b' * prompt_length, end='')
 	if should_overwrite:
+		ui_text = filename + ' '*(ui_padding + 2)
+
 		with open('in/' + filename,'r') as fin:
 			in_content = fin.read()
 			in_lines = in_content.splitlines()
@@ -727,16 +754,16 @@ def process(filename, config, origins, ui_padding):
 			robot  = vars['ROBOT']
 			if not robot:
 				robot = '0'
-				prompt_text += ' '*9                                                       ## ui prompt
+				ui_text += ' '*9                                                           ## ui prompt
 			else:
 				padding = 2 - len(robot)                                                   ## ui prompt
-				prompt_text += ' '*padding + '<R' + robot + '> '
+				ui_text += ' '*padding + '<R' + robot + '> '
 
 				pos_dima = vars.get('POSIZIONEDIMA', '')
 				if pos_dima:
-					prompt_text += pos_dima + ' '
+					ui_text += pos_dima + ' '
 				else:
-					prompt_text += ' '*3
+					ui_text += ' '*3
 				pass
 			pass
 			robot = int(robot)
@@ -1010,7 +1037,7 @@ def process(filename, config, origins, ui_padding):
 				vars['UTENSILI'] = ut_text
 			pass
 
-			prompt_text += '(' + ut_text + ')'
+			ui_text += '(' + ut_text + ')'
 
 			#
 			# Intestazione
@@ -1027,17 +1054,22 @@ def process(filename, config, origins, ui_padding):
 			fout.write(fout_content)
 		pass
 	pass
-	print(prompt_text)
+	if ui_text:
+		print(ui_text)
 pass
 
 if __name__ == '__main__':
 	print("TEXporter v{}\n".format(_VERSION))
+
+	print('A')
 
 	paths   = glob.glob('in/*')
 	config  = load_config()
 	origins = load_origins()
 	if not os.path.exists('out'):
 	    os.makedirs('out')
+
+	print('B')
 
 	max_filename_len = 0
 	for path in paths:
@@ -1049,6 +1081,8 @@ if __name__ == '__main__':
 		pass
 	pass
 
+	print('C')
+
 	for path in paths:
 		if not os.path.isdir(path):
 			filename = os.path.basename(path)
@@ -1058,5 +1092,11 @@ if __name__ == '__main__':
 		pass
 	pass
 
-	input("\n\nPremere invio per chiudere...")
+	print("\n\nPremere invio per chiudere...", end='')
+	while True:
+		event = keyboard.read_event()
+		if (event.name == 'enter') and (event.event_type == 'up'):
+			break
+		pass
+	pass
 pass
