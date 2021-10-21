@@ -1,5 +1,5 @@
 # TEXporter
-_VERSION = 2
+_VERSION = 3
 
 # CHANGELOG
 #   v0: Riconosce le diverse sezioni di cui è composto il programma.
@@ -11,6 +11,7 @@ _VERSION = 2
 #       Padding numeri righe
 #       Posizioni dima configurabili
 #   v2: UX migliorata
+#   v3: Supporto maschere
 #
 # PLANNED
 #   config: robots
@@ -23,6 +24,8 @@ _VERSION = 2
 #           optional programmer name directive
 #           r3 link in G1
 #           allow empty variables
+#           separate config for maschere
+#           built-in default templates (make it so that, without templates, it returns the same nc as input?)
 #
 #
 #
@@ -56,6 +59,12 @@ NCSEC_COORDINATES = 3
 NCSEC_TOTAL       = 4
 MOTORE_UTENSILE   = 0
 MOTORE_LUNGHEZZA  = 1
+
+MASCHERA_NOMASCHERA = ''
+MASCHERA_BASE       = 'base'
+MASCHERA_NUMERI     = 'numeri'
+MASCHERA_25MM       = '25mm'
+MASCHERA_15MM       = '15mm'
 
 
 # @todo: move into config
@@ -92,11 +101,21 @@ default_config = {
 	"ottimizza_link"                       :  "1",
 	"sostituisci_g00_g01"                  :  "1",
 	"numero_spazi_tra_coordinate"          :  "2",
+
+	# config maschere
+	"maschera_15mm_numeri_sostituzione_z-5": -15,
+	"maschera_15mm_base_sostituzione_z-5"  : -5,
 }
 
 
 def str_insert(s, insert, index):
 	return insert.join([s[:index], s[index:]])
+pass
+
+def str_replace_at_index(s, index, replacement):
+	l = list(s)
+	l[index] = replacement
+	return "".join(l)
 pass
 
 def _str_get_number(s, ignore_before):
@@ -197,12 +216,17 @@ def str_is_button_in_hotkey(hotkey, button):
 pass
 
 
-def read_template_raw(filename, robot=0):
+def read_template_raw(filename, robot=0, maschera_type=MASCHERA_NOMASCHERA):
 	template  = ''
 	variables = []
 
 	path = 'config/' + filename
-	if robot > 0:
+	if maschera_type != MASCHERA_NOMASCHERA:
+		path = 'config/maschere/{}/{}'.format(maschera_type, filename)
+		if not os.path.exists(path):
+			path = 'config/maschere/' + filename
+		pass
+	elif robot > 0:
 		path = 'config/r{}/{}'.format(robot, filename)
 		if not os.path.exists(path):
 			path = 'config/' + filename
@@ -245,11 +269,14 @@ pass
 
 
 def read_and_process_template(filename, variable_database, repeating_vars):
-	robot = variable_database['ROBOT']
-	if not robot:
+
+	maschera_type = variable_database.get('MASCHERA_TYPE', MASCHERA_NOMASCHERA)
+	robot         = variable_database.get('ROBOT', '0')
+	if not robot:  # if robot == ''
 		robot = '0'
 	robot = int(robot)
-	template, pending_vars = read_template_raw(filename, robot)
+
+	template, pending_vars = read_template_raw(filename, robot, maschera_type)
 	for var in pending_vars:
 		if ':' in var:                                      # file references
 			var_segments = var.split(':')
@@ -353,11 +380,16 @@ def config_make_int(config, name):
 pass
 
 
-def load_config():
+def load_config(is_maschera = False):
 	#
 	# Lettura configurazione
 	# ================================================================================================
-	config = parse_tex('configurazione.tex')
+	config = dict()
+	if is_maschera:
+		config = parse_tex('maschere/configurazione.tex')
+	else:
+		config = parse_tex('configurazione.tex')
+	pass
 
 	for key in config.keys():
 		if not key in default_config.keys():
@@ -421,6 +453,8 @@ def load_vars(config, robot = 0):
 
 	if robot > 0:
 		vars.update(parse_tex('r{}/variabili.tex'.format(robot)))
+	elif robot == -1:
+		vars.update(parse_tex('maschere/variabili.tex'.format(robot)))
 	pass
 
 	return vars
@@ -546,66 +580,80 @@ def load_program_info(filename, content, config):
 		'CODICE'			      : '00.00.00.00',
 		'UTENSILI'                : 'UTENSILI',
 		'ROBOT'                   : '',
-		'REV'                     : ''
+		'REV'                     : '',
+
+		'MASCHERA_TYPE'           : MASCHERA_NOMASCHERA,
+		'MASCHERA_DEPTH'          : '',
 	}
 
-	#
-	# Robot
-	# ================================================================================================
-	dima_pos_start_index = None
-	robot_id = ''
-	search_end_index = None
-	while not robot_id:
-		search = filename[:search_end_index].lower().rfind('r')
-		if search >= 0:
-			robot_id = str_get_number_or_nothing(filename[search+1:])
-			search_end_index = search
+	if 'maschera' in filename.lower():
+		result['MASCHERA_TYPE'] = MASCHERA_NUMERI if 'numeri' in filename.lower() else MASCHERA_BASE
+		if '15mm' in filename.lower() or '15 mm' in filename.lower():
+			result['MASCHERA_DEPTH'] = MASCHERA_15MM
 		else:
-			break
+			result['MASCHERA_DEPTH'] = MASCHERA_25MM
 		pass
+	pass
 
-		if robot_id:
-			robot_id = robot_id.rstrip('.')
-			as_number = int(robot_id)
-			if ('.' in robot_id) or (as_number < 0) or (as_number > 100):                    # @todo: make configurable
-				robot_id = ''
+	if result['MASCHERA_TYPE'] == MASCHERA_NOMASCHERA:
+		#
+		# Robot
+		# ================================================================================================
+		dima_pos_start_index = None
+		robot_id = ''
+		search_end_index = None
+		while not robot_id:
+			search = filename[:search_end_index].lower().rfind('r')
+			if search >= 0:
+				robot_id = str_get_number_or_nothing(filename[search+1:])
+				search_end_index = search
 			else:
-				dima_pos_start_index = filename.find('(', search)
-				if dima_pos_start_index < 0:
-					dima_pos_start_index = None
+				break
+			pass
+
+			if robot_id:
+				robot_id = robot_id.rstrip('.')
+				as_number = int(robot_id)
+				if ('.' in robot_id) or (as_number < 0) or (as_number > 100):                    # @todo: make configurable
+					robot_id = ''
+				else:
+					dima_pos_start_index = filename.find('(', search)
+					if dima_pos_start_index < 0:
+						dima_pos_start_index = None
+					pass
+				pass
+			pass
+		if robot_id:
+			result['ROBOT'] = robot_id
+		pass
+
+
+		#
+		# Posizione dima
+		# ================================================================================================
+		if dima_pos_start_index:
+			dima_pos_end_index = filename.find(')', dima_pos_start_index)
+			if dima_pos_end_index > 0:
+				pos_text = filename[dima_pos_start_index+1:dima_pos_end_index].strip()
+				if (pos_text) and \
+					(len(pos_text) == 2):
+
+					letter = ''
+					number = str_get_number_ignore_any_before(pos_text)
+					if ((len(number)) > 1) and ('0' in number):
+						letter = '0'
+						number = pos_text.replace('0', '')
+					elif number.isdigit():
+						letter = pos_text.replace(number, '')
+					pass
+
+					if ((letter.isalpha()) or (letter == '0')) and number.isdigit():
+						result['POSIZIONEDIMA'] = number + letter
+					pass
 				pass
 			pass
 		pass
-	if robot_id:
-		result['ROBOT'] = robot_id
-	pass
-
-
-	#
-	# Posizione dima
-	# ================================================================================================
-	if dima_pos_start_index:
-		dima_pos_end_index = filename.find(')', dima_pos_start_index)
-		if dima_pos_end_index > 0:
-			pos_text = filename[dima_pos_start_index+1:dima_pos_end_index].strip()
-			if (pos_text) and \
-				(len(pos_text) == 2):
-
-				letter = ''
-				number = str_get_number_ignore_any_before(pos_text)
-				if ((len(number)) > 1) and ('0' in number):
-					letter = '0'
-					number = pos_text.replace('0', '')
-				elif number.isdigit():
-					letter = pos_text.replace(number, '')
-				pass
-
-				if ((letter.isalpha()) or (letter == '0')) and number.isdigit():
-					result['POSIZIONEDIMA'] = number + letter
-				pass
-			pass
-		pass
-	pass
+	pass # maschera_type == maschera_nomaschera
 
 	#
 	# Cliente
@@ -633,14 +681,14 @@ def load_program_info(filename, content, config):
 	else: # len_desc > desc_first_line_max_length
 		max_len = desc_first_line_max_length
 		processed_len = 0
-		while (len(descrizione_pezzo) - processed_len) > max_len:
-			last_space_index = descrizione_pezzo.rfind(' ', processed_len, processed_len + max_len)
+		while (len(descrizione) - processed_len) > max_len:
+			last_space_index = descrizione.rfind(' ', processed_len, processed_len + max_len)
 			if last_space_index < 0:
-				last_space_index = descrizione_pezzo.find(' ', processed_len + max_len)
+				last_space_index = descrizione.find(' ', processed_len + max_len)
 			pass
 
 			if last_space_index > 0:
-				descrizione_pezzo = str_replace_at_index(descrizione_pezzo, last_space_index, '\n; ')
+				descrizione = str_replace_at_index(descrizione, last_space_index, '\n; ')
 				processed_len = last_space_index + 3
 			else:
 				break
@@ -711,13 +759,25 @@ def load_program_info(filename, content, config):
 	return result
 pass
 
-def process(filename, config, origins, ui_padding):
+def process(filename, config, origins, ui_padding, is_maschera):
 	should_overwrite = True
-	if os.path.exists('out/' + filename):
-		pass # @todo: prompt overwrite
-	pass
-
 	ui_text = ''
+
+	#maschera_type = None
+	#maschera_depth = None
+	#if is_maschera:
+	#	if 'numeri' in filename.lower():
+	#		maschera_type = MASCHERA_NUMERI
+	#	else:
+	#		maschera_type = MASCHERA_BASE
+	#	pass
+
+	#	if ('15mm' in filename.lower()) or ('15 mm' in filename.lower()):
+	#		maschera_depth = '15mm'
+	#	else:
+	#		maschera_depth = '25mm'
+	#	pass
+	#pass
 
 	nc_sections = []
 	in_content = None
@@ -740,37 +800,40 @@ def process(filename, config, origins, ui_padding):
 		pass
 
 		prompt_length = len(prompt_text)
-		#print('\033[1A\r' + ' ' * prompt_length + '\r', end='')
 		print('\r' + ' '*prompt_length + '\r',end='')
-		#print('\b' * prompt_length, end='')
 	if should_overwrite:
 		ui_text = filename + ' '*(ui_padding + 2)
 
+		vars  = dict()
 		with open('in/' + filename,'r') as fin:
 			in_content = fin.read()
 			in_lines = in_content.splitlines()
 
-			vars   = load_program_info(filename, in_content, config)
-			robot  = vars['ROBOT']
-			if not robot:
-				robot = '0'
-				ui_text += ' '*9                                                           ## ui prompt
-			else:
-				padding = 2 - len(robot)                                                   ## ui prompt
-				ui_text += ' '*padding + '<R' + robot + '> '
+			robot = -1
+			vars  = load_program_info(filename, in_content, config)
+			if vars['MASCHERA_TYPE'] == MASCHERA_NOMASCHERA:
+				robot  = vars['ROBOT']
 
-				pos_dima = vars.get('POSIZIONEDIMA', '')
-				if pos_dima:
-					ui_text += pos_dima + ' '
+				if not robot:
+					robot = '0'
+					ui_text += ' '*9                                                           ## ui prompt
 				else:
-					ui_text += ' '*3
+					padding = 2 - len(robot)                                                   ## ui prompt
+					ui_text += ' '*padding + '<R' + robot + '> '
+
+					pos_dima = vars.get('POSIZIONEDIMA', '')
+					if pos_dima:
+						ui_text += pos_dima + ' '
+					else:
+						ui_text += ' '*3
+					pass
 				pass
-			pass
-			robot = int(robot)
+				robot = int(robot)
+			pass # is_maschera
 
 			vars.update(load_vars(config, robot))
 			if 'POSIZIONEDIMA' in vars.keys():
-				if (robot < (len(origins) + 1)) and (origins[robot]):
+				if (robot >= 0) and (robot < (len(origins) + 1)) and (origins[robot]):
 					pos = vars['POSIZIONEDIMA']
 					number = pos[0]
 					letter = pos[1]
@@ -792,7 +855,7 @@ def process(filename, config, origins, ui_padding):
 					pass
 				pass
 			else:
-				vars['POSIZIONEDIMA'] = ''
+				vars['POSIZIONEDIMA'] = ''         # @todo: defaults
 			pass
 			
 			line_index             =  0
@@ -848,6 +911,23 @@ def process(filename, config, origins, ui_padding):
 						if config['sostituisci_g00_g01']:
 							line = line.replace('G00', 'G0')
 							line = line.replace('G01', 'G1')
+						pass
+
+						#
+						# Sostituzione Z-5 per maschere numeri 15mm
+						# ================================================================================================
+						if (vars['MASCHERA_TYPE'] != MASCHERA_NOMASCHERA) and (vars['MASCHERA_DEPTH'] == MASCHERA_15MM):
+						#if config['sostituisci_g00_g01']:
+							sub_z = ''
+							if vars['MASCHERA_TYPE'] == MASCHERA_BASE:
+								sub_z = config['maschera_15mm_base_sostituzione_z-5']
+							else:
+								sub_z = config['maschera_15mm_numeri_sostituzione_z-5']
+							pass
+
+							if sub_z and (sub_z != '-5'):
+								line = line.replace('Z-5', 'Z' + sub_z)
+							pass
 						pass
 
 						#
@@ -948,8 +1028,12 @@ def process(filename, config, origins, ui_padding):
 
 			fout_content = ''
 			utensili_utilizzati = [None, None, None]
-			repeating_vars = dict()                      # 'file.template' : n_of_repeats_left
+			repeating_vars = dict()                      # {'file.template' : n_of_repeats_left}
 
+			if (vars['MASCHERA_TYPE'] != MASCHERA_NOMASCHERA) and (len(nc_sections) > 1):
+				# @todo: Warn
+				__ERROR_TOO_MANY_SECTIONS
+			pass
 
 			for section in nc_sections:
 				#
@@ -983,14 +1067,14 @@ def process(filename, config, origins, ui_padding):
 
 				coordinates_start = 1
 				if config['mantieni_prima_coordinata']:
-					coordinates_start = None
+					coordinates_start = None                 # @todo: maschera
 				pass
 
 				vars['COORDINATE']        = '\n'.join(section[NCSEC_COORDINATES][coordinates_start:])
 
 
 				#
-				# Raccolta informazioni utensili
+				# Raccolta informazioni utensili (usati dopo, per header)
 				# ================================================================================================
 				n_motore = int(section[NCSEC_MOTORE]) - 2
 				if (n_motore < 0) or (n_motore > 2):                                   # @todo: make configurable
@@ -1061,9 +1145,10 @@ pass
 if __name__ == '__main__':
 	print("TEXporter v{}\n".format(_VERSION))
 
-	paths   = glob.glob('in/*')
-	config  = load_config()
-	origins = load_origins()
+	paths            = glob.glob('in/*')
+	config_taglio    = load_config(False)
+	config_maschera  = load_config(True)
+	origins          = load_origins()
 	if not os.path.exists('out'):
 	    os.makedirs('out')
 
@@ -1081,7 +1166,9 @@ if __name__ == '__main__':
 		if not os.path.isdir(path):
 			filename = os.path.basename(path)
 			if not ('maschera' in filename.lower()):
-				process(filename, config, origins, max_filename_len - len(filename))
+				process(filename, config_taglio, origins, max_filename_len - len(filename), False)
+			else:
+				process(filename, config_maschera, origins, max_filename_len - len(filename), True)
 			pass
 		pass
 	pass
