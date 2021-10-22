@@ -1,5 +1,5 @@
 # TEXporter
-_VERSION = 3
+_VERSION = 4
 
 from tex_defaults import *
 
@@ -14,16 +14,18 @@ from tex_defaults import *
 #       Posizioni dima configurabili
 #   v2: UX migliorata
 #   v3: Supporto maschere
+#   v4: Aggiunti tempalte di default pre-inclusi
+#       Controllo Z per programmi maschere
+#       Controllo numero utensili per programmi maschere
 #
 # PLANNED
-#     config compiler
 #     add C axis support
 #     revision alpha/numeric mix?
 #     robot directive ('r2') preferred position (on the right vs on the left)
 #     optional programmer name directive
 #     r3 link in G1
 #     allow empty variables
-#     maschere: check all Z's
+#     proper error management
 #
 #
 #
@@ -49,6 +51,16 @@ from tex_defaults import *
 
 import os, glob, keyboard
 from datetime import datetime
+
+
+def ui_warn(warning_text, warning):
+	if not warning_text:
+		warning_text += ' [Attenzione: '
+	pass
+	warning_text += warning + '; '
+
+	return warning_text
+pass
 
 def str_insert(s, insert, index):
 	return insert.join([s[:index], s[index:]])
@@ -709,23 +721,10 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 	should_overwrite = True
 	ui_text = ''
 
-	#maschera_type = None
-	#maschera_depth = None
-	#if is_maschera:
-	#	if 'numeri' in filename.lower():
-	#		maschera_type = MASCHERA_NUMERI
-	#	else:
-	#		maschera_type = MASCHERA_BASE
-	#	pass
-
-	#	if ('15mm' in filename.lower()) or ('15 mm' in filename.lower()):
-	#		maschera_depth = '15mm'
-	#	else:
-	#		maschera_depth = '25mm'
-	#	pass
-	#pass
+	warning_text = ''
 
 	nc_sections = []
+	program_Zs  = []
 	in_content = None
 	in_lines   = None
 	line_number = 1
@@ -756,7 +755,7 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 
 			robot = -1
 			local_vars = load_program_info(filename, in_content, config)
-			if 'MASCHERA_TYPE' not in local_vars.keys():
+			if 'MASCHERA_TYPE' not in local_vars.keys():         # ui for taglio
 				robot = local_vars.get('ROBOT', '')
 
 				if not robot:
@@ -774,7 +773,16 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 					pass
 				pass
 				robot = int(robot)
-			pass # is_maschera
+			else:                                               # ui for maschere
+				type  = local_vars['MASCHERA_TYPE']
+				depth = local_vars['MASCHERA_DEPTH']
+				if depth == MASCHERA_25MM:
+					depth = ''
+				else:
+					depth = ' '*(1 + len(MASCHERA_NUMERI)-len(type)) + depth
+				pass
+				ui_text += '<' + type + depth + '>'
+			pass
 
 			forced_vars = all_vars[0].copy()
 			if robot and (all_vars[robot]):
@@ -820,6 +828,17 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 					if in_str(line, MARK_SECTION_END):
 						is_reading_coordinates = False
 					else:
+						#
+						# Ricerca Z (per maschere)
+						# ================================================================================================
+						search = line.find('Z')
+						if search >= 0:
+							Z_coord = str_get_number_or_nothing(line[search+1:])
+							if Z_coord not in program_Zs:
+								program_Zs.append(Z_coord)
+							pass
+						pass
+
 						#
 						# Rimozione Nxx a inizio riga
 						# ================================================================================================
@@ -972,16 +991,30 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 			pass
 		pass
 
+		if (local_vars['MASCHERA_TYPE'] != MASCHERA_NOMASCHERA):
+			program_Zs.remove('100.000')
+			program_Zs.remove( '25.000')
+			program_Zs.remove( '10.000')
+			program_Zs.remove( '-5.000')
+			if len(program_Zs) > 0:
+				for z in program_Zs:
+					if not z:
+						z = '0'
+					pass
+					warning_text = ui_warn(warning_text, 'Z' + z)
+				pass
+			pass
+
+			if len(nc_sections) > 1:
+				warning_text = ui_warn(warning_text, '{} utensili'.format(len(nc_sections)))
+			pass
+		pass
+
 		with open('out/' + filename, 'w') as fout:
 
 			fout_content = ''
 			utensili_utilizzati = [None, None, None]
 			repeating_vars = dict()                      # {'file.template' : n_of_repeats_left}
-
-			if (local_vars['MASCHERA_TYPE'] != MASCHERA_NOMASCHERA) and (len(nc_sections) > 1):
-				# @todo: Warn
-				__ERROR_TOO_MANY_SECTIONS
-			pass
 
 			for section in nc_sections:
 				#
@@ -1058,18 +1091,20 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 			#
 			# Preparazione testo utensili
 			# ================================================================================================
-			ut_text = ''
-			for n_mot in range(3):
-				if utensili_utilizzati[n_mot] != None:
-					ut_text += 'M{} {} L{} - '.format(n_mot+2, utensili_utilizzati[n_mot][0], utensili_utilizzati[n_mot][1])
+			if local_vars.get('MASCHERA_TYPE', MASCHERA_NOMASCHERA) == MASCHERA_NOMASCHERA:
+				ut_text = ''
+				for n_mot in range(3):
+					if utensili_utilizzati[n_mot] != None:
+						ut_text += 'M{} {} L{} - '.format(n_mot+2, utensili_utilizzati[n_mot][0], utensili_utilizzati[n_mot][1])
+					pass
 				pass
-			pass
-			if ut_text:
-				ut_text = ut_text[:-3]
-				local_vars['UTENSILI'] = ut_text
-			pass
+				if ut_text:
+					ut_text = ut_text[:-3]
+					local_vars['UTENSILI'] = ut_text
+				pass
 
-			ui_text += '(' + ut_text + ')'
+				ui_text += '(' + ut_text + ')'
+			pass
 
 			#
 			# Intestazione
@@ -1087,7 +1122,12 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 		pass
 	pass
 	if ui_text:
+		if warning_text:
+			warning_text = warning_text[:-2] + ']'
+			ui_text += warning_text
+		pass
 		print(ui_text)
+	pass
 pass
 
 if __name__ == '__main__':
