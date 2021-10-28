@@ -1,5 +1,5 @@
 # TEXporter
-_VERSION = 4
+_VERSION = 5
 
 from tex_defaults import *
 
@@ -17,6 +17,7 @@ from tex_defaults import *
 #   v4: Aggiunti tempalte di default pre-inclusi
 #       Controllo Z per programmi maschere
 #       Controllo numero utensili per programmi maschere
+#   v5: "Attenzione:" e "Errore:"
 #
 # PLANNED
 #     add C axis support
@@ -25,7 +26,10 @@ from tex_defaults import *
 #     optional programmer name directive
 #     r3 link in G1
 #     allow empty variables
-#     proper error management
+#     proper error management <-
+#     rename file?
+#     preload all templates and variables (and report errors)
+#     multiple codes support (add needed lines)
 #
 #
 #
@@ -52,6 +56,41 @@ from tex_defaults import *
 import os, glob, keyboard
 from datetime import datetime
 
+
+WARNING_INTRODUCTION = ' [Attenzione: '
+templates_not_found = []
+
+def report_warning(ui_text, warning, filename = ''):
+	if ui_text:
+		ui_text += '\n'
+	pass
+
+	print(ui_text,end='')
+	if filename:
+		filename = " nel file '{}'".format(filename)
+	print('   → Attenzione{}: '.format(filename) + warning)
+pass
+
+def report_error(ui_text, error, filename = ''):
+	print(ui_text)
+	if filename:
+		filename = " nel file '{}'".format(filename)
+	print('   → Errore{}: '.format(filename) + error)
+pass
+
+
+def report_error_and_exit(ui_text, error, filename = ''):
+	report_error(ui_text, error, filename)
+
+	print("\n\nPremere invio per chiudere...", end='')
+	while True:
+		event = keyboard.read_event()
+		if (event.name == 'enter') and (event.event_type == 'up'):
+			break
+		pass
+	pass
+	exit() # @todo: maybe just skip current program?
+pass
 
 def ui_warn(warning_text, warning):
 	if not warning_text:
@@ -91,7 +130,8 @@ pass
 
 
 def str_get_number_ignore_any_before(s):
-	return _str_get_number(s, True)
+	result = _str_get_number(s, True)
+	return result
 pass
 
 
@@ -175,7 +215,10 @@ def read_template_raw(filename, robot=0, maschera_type=MASCHERA_NOMASCHERA):
 	pass
 
 	if not os.path.exists(path):
-		print("Attenzione: template '{}' non trovato!".format(path))
+		if path not in templates_not_found:
+			report_warning('', "template '{}' non trovato!".format(path))
+			templates_not_found.append(path)
+		pass
 		template = default_templates[path]
 	else:
 		with open(path, 'r') as file:
@@ -186,17 +229,15 @@ def read_template_raw(filename, robot=0, maschera_type=MASCHERA_NOMASCHERA):
 	if template:
 		mark_count = template.count('$')
 		if (mark_count % 2):
-			print("Errore: nel template '" + filename + "' sono presenti un numero dispari di '$'")
-			__ERROR_UNMATCHED_DOLLAR
+			report_error_and_exit('', "Numero dispari di '$'", path)
 		pass
 
 		mark_start = template.find('$')
 		while mark_start >= 0:
 			mark_end = template.find('$', mark_start+1)
 			var_name = template[mark_start+1 : mark_end]
-			if not var_name:
-				print("Errore: due '$' non racchiudono il nome di una variabile nel template '" + filename + "'")
-				__ERROR_NULL_VARIABLE_NAME
+			if (not var_name) or (var_name.isspace()):
+				report_error_and_exit('', "Due '$' si seguono senza racchiudere il nome di una variabile", path)
 			pass
 
 			if not (var_name in variables):
@@ -206,32 +247,29 @@ def read_template_raw(filename, robot=0, maschera_type=MASCHERA_NOMASCHERA):
 		pass
 	pass
 
-	return template, variables
+	return template, variables, path
 pass
 
 
 def read_and_process_template(filename, variable_database, repeating_vars):
-
 	maschera_type = variable_database.get('MASCHERA_TYPE', MASCHERA_NOMASCHERA)
 	robot         = variable_database.get('ROBOT', '0')
 	if not robot:  # if robot == ''
 		robot = '0'
 	robot = int(robot)
 
-	template, pending_vars = read_template_raw(filename, robot, maschera_type)
+	template, pending_vars, path = read_template_raw(filename, robot, maschera_type)
 	for var in pending_vars:
 		if ':' in var:                                      # file references
 			var_segments = var.split(':')
 			if len(var_segments) > 2:
-				print("Errore: il riferimento a file '{}' nel template '{}' contiene due o più ':'".format(var, filename))
-				__SYNTAX_ERROR_FILE_REFERENCE
+				report_error_and_exit('', "sintassi errata '${}$'".format(var), path)
 			pass
 
 			repeat_count    = var_segments[0]
 			referenced_file = var_segments[1]
 			if referenced_file == filename:
-				print("ERRORE: il template '{}' contiene un riferimento a se stesso")
-				__ERROR_RECURSIVE_TEMPLATE
+				report_error_and_exit('', "un template non può includere se stesso ('${}$)'".format(var), path)
 			pass
 
 			referenced_template = ''
@@ -263,10 +301,9 @@ def _parse_tex(filename):
 	if os.path.exists('config/' + filename):
 		with open('config/' + filename, 'r') as tfile:
 			line_number = 0
-			for org_line in tfile.read().splitlines():
+			for line in tfile.read().splitlines():
 				line_number += 1
 
-				line = org_line
 				comment_start = line.find(';')
 				if comment_start >= 0:
 					line = line[:comment_start].strip()
@@ -275,23 +312,21 @@ def _parse_tex(filename):
 				if line:
 					separator_index = line.find(':')
 					if separator_index < 0:
-						print("ERRORE: nessun ':' trovato;\n  config/{}""[{}]: '{}'\n".\
-							  format(filename, line_number, org_line))
-						__ERROR_VARIABLE_DEFINITION_SYNTAX_ERROR
+						report_error_and_exit('', "nessun ':' trovato nella riga {} ({})".format(line_number, line), 'config/' + filename)
+						# @todo: check
 					pass
 
 					var_name  = line[:separator_index].replace(' ', '')
 					var_value = line[separator_index + 1:].lstrip()
 					
 					if not var_name:
-						print("ERRORE: definizione variabile senza nome;\n  config/{}[{}]: '{}'\n".\
-							  format(filename, line_number, org_line))
-						__ERROR_VARIABLE_DEFINITION_EMPTY_NAME
+						report_error_and_exit('', "nome variabile mancante nella riga {} ({})".format(line_number, line), 'config/' + filename)
+						# @todo: check
 					pass
 					
 					if var_name in vars.keys():
-						print("Attenzione: variabile precedentemente definita, il nuovo valore sarà ignorato;\n  config/{}[{}]: '{}'\n".\
-							  format(filename, line_number, org_line))
+						report_warning('', "ridefinizione di '{}' nella riga {}, manterrà il valore precedente".\
+									   format(var_name, line_number), filename)
 					else:
 						vars[var_name] = var_value
 					pass
@@ -303,21 +338,21 @@ def _parse_tex(filename):
 pass
 
 
-def config_make_bool(config, name):
+def config_make_bool(src_path, config, name):
 	if config[name].isnumeric():
 		config[name] = bool(int(config[name]))
 	else:
-		print("Errore: la variabile '{}' dev'essere '0' o '1'".format(name))
-		__ERROR_VARIABLE_FORMAT_BOOL
+		report_error_and_exit('', "la variabile '{}' deve essere '0' o '1'", src_path)
+		# @todo: check
 	pass
 pass
 
-def config_make_int(config, name):
+def config_make_int(src_path, config, name):
 	if config[name].isnumeric() or (config[name][0] == '-' and config[name][1:].isnumeric()):
 		config[name] = int(config[name])
 	else:
-		print("Errore: la variabile '{}' dev'essere un numero".format(name))
-		__ERROR_VARIABLE_FORMAT_BOOL
+		report_error_and_exit('', "la variabile '{}' deve avere un valore numerico", src_path)
+		# @todo: check
 	pass
 pass
 
@@ -327,15 +362,14 @@ def load_config(is_maschera = False):
 	# Lettura configurazione
 	# ================================================================================================
 	config = dict()
+	path = 'configurazione.tex'
 	if is_maschera:
-		config = _parse_tex('maschere/configurazione.tex')
-	else:
-		config = _parse_tex('configurazione.tex')
-	pass
+		path = 'maschere/' + path
+	config = _parse_tex('configurazione.tex')
 
 	for key in config.keys():
 		if not key in default_config.keys():
-			print("Attenzione: variabile di configurazione '{}' non riconosciuta; sarà ignorata".format(key))
+			report_warning('', "Variabile di configurazione '{}' non riconosciuta; sarà ignorata".format(key), path)
 		pass
 	pass
 
@@ -349,16 +383,16 @@ def load_config(is_maschera = False):
 	#
 	# Controllo tipi variabili
 	# ================================================================================================
-	config_make_bool(config, 'righe_numerate')
-	config_make_bool(config, 'numerazione_righe_sulla_destra')
-	config_make_bool(config, 'mantieni_prima_coordinata')
-	config_make_bool(config, 'ottimizza_link')
-	config_make_bool(config, 'sostituisci_g00_g01')
+	config_make_bool(path, config, 'righe_numerate')
+	config_make_bool(path, config, 'numerazione_righe_sulla_destra')
+	config_make_bool(path, config, 'mantieni_prima_coordinata')
+	config_make_bool(path, config, 'ottimizza_link')
+	config_make_bool(path, config, 'sostituisci_g00_g01')
 
-	config_make_int(config, 'distanza_numeri_righe')
-	config_make_int(config, 'numero_spazi_tra_coordinate')
-	config_make_int(config, 'descrizione_max_lunghezza_prima_riga')
-	config_make_int(config, 'descrizione_max_lunghezza_altre_righe')
+	config_make_int(path, config, 'distanza_numeri_righe')
+	config_make_int(path, config, 'numero_spazi_tra_coordinate')
+	config_make_int(path, config, 'descrizione_max_lunghezza_prima_riga')
+	config_make_int(path, config, 'descrizione_max_lunghezza_altre_righe')
 
 
 	#
@@ -441,8 +475,8 @@ def _parse_origin(path, s):
 		if piece:
 			start = piece.find('(')
 			if start < 0:
-				print("ERRORE: parentesi non aperta in '{}': {}".format(path, s))
-				__SYNTAX_ERROR_ORIGIN_FILE_PARENTHESIS
+				report_error_and_exit('', "parentesi non aperta '{}'".format(s), path)
+								# @todo: check
 			pass
 
 			piece = piece[start+1:]
@@ -513,15 +547,15 @@ def load_origins():
 							elif 'Z' in before_colon:
 								current_axis = Z_INDEX
 							else:
-								print("ERRORE: nessun asse specificato nella riga {} del file '{}'".format(i, path))
-								__SYNTAX_ERROR_ORIGIN_FILE
+								report_error_and_exit('', "nessun asse specificato nella riga {}".format(i), path)
+								# @todo: check
 							pass
 						pass
 						
 						if line.strip():
 							if current_axis < 0:
-								print("ERRORE in '{}[{}]': coordinate specificate prima di definire un asse".format(path, i))
-								__SYNTAX_ERROR_ORIGIN_FILE
+								report_error_and_exit('', "coordinate specificate prima di definire un asse (riga {})".format(i), path)
+								# @todo: check
 							pass
 
 							axes_lines[current_axis] += line
@@ -545,7 +579,7 @@ def load_origins():
 pass
 
 
-def load_program_info(filename, content, config):
+def load_program_info(filename, content, config, warning_text):
 	result = dict()
 
 	if 'maschera' in filename.lower():
@@ -711,10 +745,11 @@ def load_program_info(filename, content, config):
 	if search:
 		result['PROGRAMMA'] = search.upper()
 		if len(result['PROGRAMMA']) != 7:
-			print("ATTENZIONE: nome '" + result['PROGRAMMA'] + "' è composto da", len(result['PROGRAMMA']), "caratteri")
+			warning_text = ui_warn(warning_text, "Il nome '{}' è composto da {} caratteri".\
+								   format(result['PROGRAMMA'], len(result['PROGRAMMA'])))
 		pass
 	pass
-	return result
+	return result, warning_text
 pass
 
 def process(filename, config, all_vars, origins, ui_padding, is_maschera):
@@ -754,7 +789,7 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 			in_lines = in_content.splitlines()
 
 			robot = -1
-			local_vars = load_program_info(filename, in_content, config)
+			local_vars, warning_text = load_program_info(filename, in_content, config, warning_text)
 			if 'MASCHERA_TYPE' not in local_vars.keys():         # ui for taglio
 				robot = local_vars.get('ROBOT', '')
 
@@ -859,6 +894,8 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 									if 'Z' in test_line:
 										nc_sections[current_section_index][NCSEC_COORDINATES].extend(link_lines)
 										link_lines = []
+
+										warning_text = ui_warn(warning_text, 'Variazione Z durante un link, ottimizzazione saltata')
 										break
 									pass
 									test_line  = nc_sections[current_section_index][NCSEC_COORDINATES].pop()
@@ -968,7 +1005,9 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 					current_section_index += 1
 					nc_sections[current_section_index][NCSEC_COORDINATES] = []
 
-					nc_sections[current_section_index][NCSEC_UTENSILE] = utensile_type + str_get_number_ignore_any_before(line[search_index:]).rstrip('.0')
+					nc_sections[current_section_index][NCSEC_UTENSILE] = (utensile_type + 
+																		  str_get_number_ignore_any_before(line[search_index:]).\
+																		  rstrip('0').rstrip('.'))
 				pass
 
 				#
@@ -976,7 +1015,8 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 				# ================================================================================================
 				search_index = line.find(SEARCH_L385)
 				if search_index >= 0:
-					nc_sections[current_section_index][NCSEC_LUNGHEZZA] = str_get_number_ignore_any_before(line[search_index + len(SEARCH_L385):]).rstrip('0').rstrip('.')
+					nc_sections[current_section_index][NCSEC_LUNGHEZZA] = \
+						str_get_number_ignore_any_before(line[search_index + len(SEARCH_L385):]).rstrip('0').rstrip('.')
 				pass
 
 				#
@@ -984,7 +1024,8 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 				# ================================================================================================
 				search_index = line.find(SEARCH_L386)
 				if search_index >= 0:
-					nc_sections[current_section_index][NCSEC_MOTORE] = str_get_number_ignore_any_before(line[search_index + len(SEARCH_L386):])
+					nc_sections[current_section_index][NCSEC_MOTORE] = \
+						str_get_number_ignore_any_before(line[search_index + len(SEARCH_L386):])
 				pass
 				
 				line_index += 1
@@ -1059,11 +1100,11 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 				# ================================================================================================
 				n_motore = int(section[NCSEC_MOTORE]) - 2
 				if (n_motore < 0) or (n_motore > 2):                                   # @todo: make configurable
-					___ERRORE_N_MOTORE_NON_VALIDO
+					report_error_and_exit(ui_text, "Specificato motore numero {}".format(n_motore + 2))
 				elif ( (utensili_utilizzati[n_motore] != None) and \
 					   ( (utensili_utilizzati[n_motore][MOTORE_UTENSILE] != section[NCSEC_UTENSILE]) or \
 					     (utensili_utilizzati[n_motore][MOTORE_LUNGHEZZA] != section[NCSEC_LUNGHEZZA]))):
-					___ERRORE_N_MOTORE_DUPLICATO
+					report_error_and_exit(ui_text, "Il motore {} è usato più volte con utensili differenti".format(n_motore + 2))
 				pass
 				utensili_utilizzati[n_motore] = [None, None]
 				utensili_utilizzati[n_motore][MOTORE_UTENSILE]  = section[NCSEC_UTENSILE]
@@ -1124,8 +1165,49 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 	if ui_text:
 		if warning_text:
 			warning_text = warning_text[:-2] + ']'
+			term_size = None
+
+			try:
+				term_size = os.get_terminal_size()
+			except OSError:
+				pass
+			pass
+
+			if (term_size != None):
+				max_len = term_size.columns - len(ui_text) - len(WARNING_INTRODUCTION)
+
+				if max_len >= 10:   # @note: if we have less than 10 columns to work with, it's better to let it wrap with the default behavior
+					colon_index   = len(WARNING_INTRODUCTION)
+					processed_len = colon_index
+
+					# @note: colon_index, in theory, should never be == -1
+					while (len(warning_text) - processed_len) > max_len:
+						last_colon_index = warning_text.find('; ') + 1
+
+						last_space_index = warning_text.rfind(' ', processed_len, processed_len + max_len)
+						if last_space_index < 0:
+							last_space_index = warning_text.find(' ', processed_len + max_len)
+						pass
+
+						last_index = last_space_index
+						if (last_colon_index > 0) and (last_colon_index < last_index):
+							last_index = last_colon_index
+						pass
+
+						if last_index > 0:
+							warning_text = str_replace_at_index(warning_text, last_index, '\n')
+							processed_len = last_index + 1
+						else:
+							break
+						pass
+					pass
+
+					warning_text = warning_text.replace('\n', '\n' + ' '*(len(ui_text) + colon_index))
+				pass
+			pass
 			ui_text += warning_text
 		pass
+
 		print(ui_text)
 	pass
 pass
