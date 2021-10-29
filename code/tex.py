@@ -18,19 +18,14 @@ from tex_defaults import *
 #       Controllo Z per programmi maschere
 #       Controllo numero utensili per programmi maschere
 #   v5: "Attenzione:" e "Errore:"
-#   v6: All(almost) program info from input filename
+#   v6: Quasi tutte le informazioni sul programma sono lette dal nome dell'nc
+#   v7: Codice Lapi
 #
 # PLANNED
 #     add C axis support
-#     revision alpha/numeric mix?
-#     robot directive ('r2') preferred position (on the right vs on the left)
-#     optional programmer name directive
-#     r3 link in G1
 #     allow empty variables
-#     proper error management <-
 #     rename file?
 #     preload all templates and variables (and report errors)
-#     multiple codes support (add needed lines)
 #
 #
 #
@@ -643,15 +638,38 @@ def load_program_info(filename, content, config, warning_text):
 		token = filename[start:end]
 
 		if token[0] == 'c':
-			token = token[2:]
-			search = token.find('rev')
-			rev = ''
-			if search > -1:
-				rev   = token[search + 3:].strip().upper()
-				token = token[:search]
+			lapi_separator = config.get('separatore_codice_lapi','@')
+			token     = token[2:]
+			rev_text  = ''
+			lapi_text = ''
+
+			search_rev  = token.find('rev')
+			search_lapi = token.find(lapi_separator)
+			if search_rev < search_lapi:       # @todo: i'm making this in a hurry, it's hacky code
+				if search_lapi > -1:
+					lapi_text = token[search_lapi + len(lapi_separator):]
+					token     = token[:search_lapi]
+				pass
+
+				if search_rev > -1:
+					rev_text = token[search_rev + 3:]
+					token    = token[:search_rev]
+				pass
+			else:
+				if search_rev > -1:
+					rev_text = token[search_rev + 3:]
+					token    = token[:search_rev]
+				pass
+
+				if search_lapi > -1:
+					lapi_text = token[search_lapi + len(lapi_separator):]
+					token     = token[:search_lapi]
+				pass
 			pass
 
-			result['all_CODICI'].append((token.strip(),rev))
+			lapi = lapi_text.strip().upper()
+			rev  =  rev_text.strip().upper()
+			result['all_CODICI'].append((token.strip(), lapi, rev))
 
 		#
 		# Nome programma
@@ -723,6 +741,14 @@ def load_program_info(filename, content, config, warning_text):
 pass
 
 def process(filename, config, all_vars, origins, ui_padding, is_maschera):
+	term_size = None
+
+	try:
+		term_size = os.get_terminal_size()
+	except OSError:
+		pass
+	pass
+
 	should_overwrite = True
 	ui_text = ''
 
@@ -735,7 +761,16 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 	line_number = 1
 	if os.path.exists('out/' + filename):
 		should_overwrite = None
-		prompt_text = "Il file '" + filename + "' esiste nella cartella 'out', sovrascrivere? [Sn] "
+		max_prompt_len = 70 if term_size == None else (term_size.columns - 3)
+
+		prompt_text = "Il file '{}' esiste nella cartella 'out', sovrascrivere? [Sn] "
+		if (len(prompt_text) - 2 + len(filename)) > max_prompt_len:
+			delta = len(filename) - (max_prompt_len - len(prompt_text) + 2)
+			prompt_text = prompt_text.format(filename[:-delta - 3] + '...')
+		else:
+			prompt_text = prompt_text.format(filename)
+		pass
+
 		print(prompt_text, end='', flush=True)
 
 		while should_overwrite == None:
@@ -752,7 +787,12 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 		prompt_length = len(prompt_text)
 		print('\r' + ' '*prompt_length + '\r',end='')
 	if should_overwrite:
-		ui_text = filename + ' '*(ui_padding + 2)
+		short_name = filename
+		if len(short_name) > MAX_UI_FILENAME_LEN:
+			short_name = short_name[:MAX_UI_FILENAME_LEN + 1]
+		pass
+
+		ui_text = short_name + ' '*(ui_padding - len(short_name) + 2)
 
 		with open('in/' + filename,'r') as fin:
 			in_content = fin.read()
@@ -1124,13 +1164,14 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 			# ================================================================================================
 			local_vars['RIGHECODICI'] = ''
 			if len(local_vars['all_CODICI']) == 0:
-				local_vars['all_CODICI'].append((local_vars['CODICE'], ''))
+				local_vars['all_CODICI'].append((local_vars['CODICE'], local_vars['CODICELAPI'], ''))
 			pass
 
 			for code in local_vars['all_CODICI']:
-				local_vars['CODICE'] = code[0]
-				if code[1]:
-					local_vars['REV'] = 'Rev.' + code[1]
+				local_vars['CODICE']     = code[CODE_CODICE]
+				local_vars['CODICELAPI'] = code[CODE_LAPI]
+				if code[CODE_REV]:
+					local_vars['REV'] = 'Rev.' + code[CODE_REV]
 				else:
 					local_vars['REV'] = ''
 				pass
@@ -1157,13 +1198,6 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 	if ui_text:
 		if warning_text:
 			warning_text = warning_text[:-2] + ']'
-			term_size = None
-
-			try:
-				term_size = os.get_terminal_size()
-			except OSError:
-				pass
-			pass
 
 			if (term_size != None):
 				max_len = term_size.columns - len(ui_text) - len(WARNING_INTRODUCTION)
@@ -1220,6 +1254,10 @@ if __name__ == '__main__':
 	for path in paths:
 		if not os.path.isdir(path):
 			this_len = len(os.path.basename(path))
+			if this_len > MAX_UI_FILENAME_LEN:
+				this_len = MAX_UI_FILENAME_LEN
+			pass
+
 			if this_len > max_filename_len:
 				max_filename_len = this_len
 			pass
@@ -1230,9 +1268,9 @@ if __name__ == '__main__':
 		if not os.path.isdir(path):
 			filename = os.path.basename(path)
 			if not ('maschera' in filename.lower()):
-				process(filename, config_taglio, all_vars, origins, max_filename_len - len(filename), False)
+				process(filename, config_taglio, all_vars, origins,   max_filename_len, False)
 			else:
-				process(filename, config_maschera, all_vars, origins, max_filename_len - len(filename), True)
+				process(filename, config_maschera, all_vars, origins, max_filename_len, True)
 			pass
 		pass
 	pass

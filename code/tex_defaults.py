@@ -20,10 +20,15 @@ SEARCH_FRESA = 'FRESA CILINDRICA'
 SEARCH_DISCO = 'FRESA SFERICA'
 MARK_SECTION_START = '(TCP,'
 MARK_SECTION_END   = ['(TCP)', 'FINE PROGRAMMA']
+MAX_UI_FILENAME_LEN = 50
 
 X_INDEX = 0
 Y_INDEX = 1
 Z_INDEX = 2
+
+CODE_CODICE = 0
+CODE_LAPI   = 1
+CODE_REV    = 2
 
 default_vars = {
 	'ORIGX'                          : '',
@@ -34,7 +39,8 @@ default_vars = {
 	'PROGRAMMA'                      : 'PROGRAMMA',
 	'CLIENTE'                        : 'cliente',
 	'DESCRIZIONE'                    : 'Descrizione',
-	'CODICE'			             : '00.00.00.00',
+	'CODICE'			             : '00.00.00',
+	'CODICELAPI'		             : '0000',
 	'UTENSILI'                       : 'UTENSILI',
 	'ROBOT'                          : '',
 	'REV'                            : '',
@@ -46,20 +52,21 @@ default_vars = {
 }
 
 default_config = {
-	"stringa_cliente"                       : "CLIENTE",
-	"stringa_descrizione_pezzo"             : "DESCRIZIONE PEZZO",
-	"stringa_codice"                        : "CODICE PEZZO",
-	"stringa_revisione"                     : "REV",
-	"stringa_nome_programma"                : "NOTE",
-	"descrizione_max_lunghezza"             : "34",
-	"formato_data"                          : "g.m.aaaa",
-	"righe_numerate"                        :  "1",
-	"numerazione_righe_sulla_destra"        :  "1",
-	"distanza_numeri_righe"                 :  "70",
-	"mantieni_prima_coordinata"             :  "1",
-	"ottimizza_link"                        :  "1",
-	"sostituisci_g00_g01"                   :  "1",
-	"numero_spazi_tra_coordinate"           :  "2",
+	"stringa_cliente"                : "CLIENTE",
+	"stringa_descrizione_pezzo"      : "DESCRIZIONE PEZZO",
+	"stringa_codice"                 : "CODICE PEZZO",
+	"stringa_revisione"              : "REV",
+	"stringa_nome_programma"         : "NOTE",
+	"descrizione_max_lunghezza"      : "34",
+	"formato_data"                   : "g.m.aaaa",
+	"righe_numerate"                 :  "1",
+	"numerazione_righe_sulla_destra" :  "1",
+	"distanza_numeri_righe"          : "70",
+	"mantieni_prima_coordinata"      :  "1",
+	"ottimizza_link"                 :  "1",
+	"sostituisci_g00_g01"            :  "1",
+	"numero_spazi_tra_coordinate"    :  "2",
+	"separatore_codice_lapi"         :  "@",
 
 	# config maschere
 	"maschera_15mm_numeri_sostituzione_z-5" : '-15',
