@@ -1,7 +1,8 @@
 ;                             * * * $PROGRAMMA$ * * *
 ; ==============================================================================
 ;                                                      "$CLIENTE$"
-; $DESCRIZIONE_PRIMA_RIGA$                   [$CODICE$] $REV$$DESCRIZIONE_ALTRE_RIGHE$
+; $DESCRIZIONE$
+$RIGHECODICI$
 ;
 ; ==============================================================================
 ;                             $UTENSILI$

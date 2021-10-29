@@ -3,12 +3,12 @@
 ;
 (UAO,0)
 ;
-G90 G0 Z0
-G90 G0 Y$SAFETY_Y$
+G90 G0 Z$Z_zero$
+G90 G0 Y$Y_margine$
 ;
-A0 B0
+A$A_zero$ B$B_zero$
 ;
-X0 Y0 Z0
+X$X_zero$ Y$Y_zero$ Z$Z_zero$
 ;
 M5
 ;

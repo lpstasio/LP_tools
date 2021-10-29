@@ -1,5 +1,5 @@
 # TEXporter
-_VERSION = 5
+_VERSION = 6
 
 from tex_defaults import *
 
@@ -18,6 +18,7 @@ from tex_defaults import *
 #       Controllo Z per programmi maschere
 #       Controllo numero utensili per programmi maschere
 #   v5: "Attenzione:" e "Errore:"
+#   v6: All(almost) program info from input filename
 #
 # PLANNED
 #     add C axis support
@@ -41,8 +42,7 @@ from tex_defaults import *
 #            "stringa_codice"                : "CODICE PEZZO",
 #            "stringa_revisione"             : "REV",
 #            "stringa_nome_programma"        : "NOTE"
-#            "desc_max_lunghezza_prima_riga" : "34",
-#            "desc_max_lunghezza"            : "45",
+#            "desc_max_lunghezza"            : "34",
 #            "formato_data"                  : "g.m.aaaa",
 #
 #            righe_numerate:                 1
@@ -391,8 +391,7 @@ def load_config(is_maschera = False):
 
 	config_make_int(path, config, 'distanza_numeri_righe')
 	config_make_int(path, config, 'numero_spazi_tra_coordinate')
-	config_make_int(path, config, 'descrizione_max_lunghezza_prima_riga')
-	config_make_int(path, config, 'descrizione_max_lunghezza_altre_righe')
+	config_make_int(path, config, 'descrizione_max_lunghezza')
 
 
 	#
@@ -581,75 +580,17 @@ pass
 
 def load_program_info(filename, content, config, warning_text):
 	result = dict()
+	result['all_CODICI'] = []
+	filename = filename.lower()
 
-	if 'maschera' in filename.lower():
-		result['MASCHERA_TYPE'] = MASCHERA_NUMERI if 'numeri' in filename.lower() else MASCHERA_BASE
-		if '15mm' in filename.lower() or '15 mm' in filename.lower():
+	if 'maschera' in filename:
+		result['MASCHERA_TYPE'] = MASCHERA_NUMERI if 'numeri' in filename else MASCHERA_BASE
+		if '15mm' in filename or '15 mm' in filename:
 			result['MASCHERA_DEPTH'] = MASCHERA_15MM
 		else:
 			result['MASCHERA_DEPTH'] = MASCHERA_25MM
 		pass
 	pass
-
-	if 'MASCHERA_TYPE' not in result.keys():
-		#
-		# Robot
-		# ================================================================================================
-		dima_pos_start_index = None
-		robot_id = ''
-		search_end_index = None
-		while not robot_id:
-			search = filename[:search_end_index].lower().rfind('r')
-			if search >= 0:
-				robot_id = str_get_number_or_nothing(filename[search+1:])
-				search_end_index = search
-			else:
-				break
-			pass
-
-			if robot_id:
-				robot_id = robot_id.rstrip('.')
-				as_number = int(robot_id)
-				if ('.' in robot_id) or (as_number < 0) or (as_number > 100):                    # @todo: make configurable
-					robot_id = ''
-				else:
-					dima_pos_start_index = filename.find('(', search)
-					if dima_pos_start_index < 0:
-						dima_pos_start_index = None
-					pass
-				pass
-			pass
-		if robot_id:
-			result['ROBOT'] = robot_id
-		pass
-
-
-		#
-		# Posizione dima
-		# ================================================================================================
-		if dima_pos_start_index:
-			dima_pos_end_index = filename.find(')', dima_pos_start_index)
-			if dima_pos_end_index > 0:
-				pos_text = filename[dima_pos_start_index+1:dima_pos_end_index].strip()
-				if (pos_text) and \
-					(len(pos_text) == 2):
-
-					letter = ''
-					number = str_get_number_ignore_any_before(pos_text)
-					if ((len(number)) > 1) and ('0' in number):
-						letter = '0'
-						number = pos_text.replace('0', '')
-					elif number.isdigit():
-						letter = pos_text.replace(number, '')
-					pass
-
-					if ((letter.isalpha()) or (letter == '0')) and number.isdigit():
-						result['POSIZIONEDIMA'] = number + letter
-					pass
-				pass
-			pass
-		pass
-	pass # maschera_type == maschera_nomaschera
 
 	#
 	# Cliente
@@ -659,96 +600,125 @@ def load_program_info(filename, content, config, warning_text):
 		result['CLIENTE'] = search.lower()
 
 	#
-	# Descrizione
+	# Ricerca informazioni nel nome dell'nc
 	# ================================================================================================
-	descrizione = result.get('DESCRIZIONE_PRIMA_RIGA', default_vars['DESCRIZIONE_PRIMA_RIGA'])
-	search = str_get_value(content, config['stringa_descrizione_pezzo'])
-	if search:
-		descrizione = search.capitalize()
+	search = filename.find('c_')
 
-	#
-	# Formattazione descrizione
-	# ================================================================================================
-	desc_first_line_max_length = int(config.get('descrizione_max_lunghezza_prima_riga', '34'))
-	desc_other_line_max_length = int(config.get('descrizione_max_lunghezza_altre_righe', '45'))
+	search = 0
+	token_indices = []
+	token_ids = ['p_', 'r_', 'd_', 'n_']
+	c_start = 0
 
-	max_len = desc_first_line_max_length
-	processed_len = 0
-	while (max_len > 0) and ((len(descrizione) - processed_len) > max_len):
-		last_space_index = descrizione.rfind(' ', processed_len, processed_len + max_len)
-		if last_space_index < 0:
-			last_space_index = descrizione.find(' ', processed_len + max_len)
-		pass
-
-		if last_space_index > 0:
-			descrizione = str_replace_at_index(descrizione, last_space_index, '\n; ')
-			processed_len = last_space_index + 3
+	# ricerca 'c_' per codici
+	while True:
+		search = filename.find('c_', c_start)
+		if search > -1:
+			token_indices.append(search)
+			c_start = search + 1
 		else:
 			break
 		pass
-		max_len = desc_other_line_max_length
-	pass
-	descrizione = descrizione.split('\n')
-
-	result['DESCRIZIONE_PRIMA_RIGA']  = descrizione[0].ljust(desc_first_line_max_length, ' ')
-	if len(descrizione) > 1:  # descrizione ha più di una riga
-		descrizione[1] = '\n' + descrizione[1]
-		result['DESCRIZIONE_ALTRE_RIGHE'] = '\n'.join(descrizione[1:])
 	pass
 
-	#
-	# Codice
-	# ================================================================================================
-	search = str_get_value(content, config['stringa_codice'])
-	if search:
-		result['CODICE'] = search.upper()
-
-	#
-	# Revisione
-	# ================================================================================================
-	rev_search = content.find(config['stringa_revisione'])
-	rev_value = ''
-	if rev_search >= 0:
-		rev_search += len(config['stringa_revisione'])
-
-		# getting next alphanumeric
-		is_numeric = False
-		is_started = False
-		for c in content[rev_search:]:
-			if is_started:
-				if is_numeric:
-					if c.isnumeric():
-						rev_value += c
-					else:
-						rev_value = str(int(rev_value))
-						break
-				else:
-					if c.isalpha():
-						rev_value += c
-					else:
-						break
-			else:
-				if c.isalpha():
-					is_numeric = False
-					is_started = True
-					rev_value += c
-				elif c.isnumeric():
-					is_numeric = True
-					is_started = True
-					rev_value += c
-		result['REV'] = 'Rev.' + rev_value
-
-	#
-	# Nome programma
-	# ================================================================================================
-	search = str_get_value(content, config['stringa_nome_programma'], ' ', '\n')
-	if search:
-		result['PROGRAMMA'] = search.upper()
-		if len(result['PROGRAMMA']) != 7:
-			warning_text = ui_warn(warning_text, "Il nome '{}' è composto da {} caratteri".\
-								   format(result['PROGRAMMA'], len(result['PROGRAMMA'])))
+	# ricerca p_/r_/d_ per nome programma/robot/descrizione pezzo
+	for id in token_ids:
+		search = filename.find(id)
+		if search > -1:
+			token_indices.append(search)
 		pass
 	pass
+
+	# ricerca fine nome file
+	search = filename.rfind('.')
+	if search > -1:
+		token_indices.append(search)
+	else:
+		token_indices.append(len(filename))
+	pass
+
+	token_indices.sort()
+	for i in range(len(token_indices)-1):
+		start = token_indices[i]
+		end   = token_indices[i+1]
+		token = filename[start:end]
+
+		if token[0] == 'c':
+			token = token[2:]
+			search = token.find('rev')
+			rev = ''
+			if search > -1:
+				rev   = token[search + 3:].strip().upper()
+				token = token[:search]
+			pass
+
+			result['all_CODICI'].append((token.strip(),rev))
+
+		#
+		# Nome programma
+		# ================================================================================================
+		elif token[0] == 'p':
+			token = token[2:]
+			nome_programma = token.strip().upper()
+
+			if (len(nome_programma) != 7) and (len(nome_programma) != 8):
+				warning_text = ui_warn(warning_text, "Il nome '{}' è composto da {} caratteri".\
+									   format(result['PROGRAMMA'], len(result['PROGRAMMA'])))
+			pass
+
+			result['PROGRAMMA'] = nome_programma
+
+		#
+		# Robot e posizione dima
+		# ================================================================================================
+		elif token[0] == 'r':
+			token = token[2:]
+			search = token.find('(')
+
+			posizione_dima = ''
+			if search > -1:
+				posizione_dima = token[search:].rstrip(') ').lstrip('( ').upper()
+				token = token[:search]
+			pass
+
+			# Parsing posizione dima
+			if (posizione_dima) and (len(posizione_dima) == 2):
+				letter = ''
+				number = str_get_number_ignore_any_before(posizione_dima)
+				if ((len(number)) > 1) and ('0' in number):
+					letter = '0'
+					number = posizione_dima.replace('0', '')
+				elif number.isdigit():
+					letter = posizione_dima.replace(number, '')
+				pass
+
+				if ((letter.isalpha()) or (letter == '0')) and number.isdigit():
+					result['POSIZIONEDIMA'] = number + letter
+				pass
+			pass
+
+			result['ROBOT'] = str_get_number_or_nothing(token.strip())
+
+		#
+		# Descrizione
+		# ================================================================================================
+		elif token[0] == 'd':
+			token = token[2:]
+			descrizione = token.strip().capitalize()
+			desc_max_len = config.get('descrizione_max_lunghezza', 0)
+
+			result['DESCRIZIONE'] = descrizione.ljust(desc_max_len)
+
+		#
+		# Nome programmatore
+		# ================================================================================================
+		elif token[0] == 'n':
+			token = token[2:].strip()
+			if token:
+				result['PROGRAMMATORE'] = token
+			pass
+		pass
+	pass
+
 	return result, warning_text
 pass
 
@@ -827,7 +797,7 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 			local_vars = forced_vars
 
 			if ('POSIZIONEDIMA' in local_vars.keys()) and (local_vars['POSIZIONEDIMA'] != default_vars['POSIZIONEDIMA']):
-				if (robot >= 0) and (robot < (len(origins) + 1)) and (origins[robot]):
+				if (robot >= 0) and (len(origins) != 0) and (robot < (len(origins) + 1)) and (origins[robot]):
 					pos = local_vars['POSIZIONEDIMA']
 					number = pos[0]
 					letter = pos[1]
@@ -848,6 +818,7 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 						pass
 					pass
 				pass
+			pass
 			
 			line_index             =  0
 			current_section_index  = -1
@@ -1100,7 +1071,7 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 				# ================================================================================================
 				n_motore = int(section[NCSEC_MOTORE]) - 2
 				if (n_motore < 0) or (n_motore > 2):                                   # @todo: make configurable
-					report_error_and_exit(ui_text, "Specificato motore numero {}".format(n_motore + 2))
+					report_error_and_exit(ui_text, "Numero motore invalido ({})".format(n_motore + 2))
 				elif ( (utensili_utilizzati[n_motore] != None) and \
 					   ( (utensili_utilizzati[n_motore][MOTORE_UTENSILE] != section[NCSEC_UTENSILE]) or \
 					     (utensili_utilizzati[n_motore][MOTORE_LUNGHEZZA] != section[NCSEC_LUNGHEZZA]))):
@@ -1146,6 +1117,27 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 
 				ui_text += '(' + ut_text + ')'
 			pass
+
+
+			#
+			# Righe codici
+			# ================================================================================================
+			local_vars['RIGHECODICI'] = ''
+			if len(local_vars['all_CODICI']) == 0:
+				local_vars['all_CODICI'].append((local_vars['CODICE'], ''))
+			pass
+
+			for code in local_vars['all_CODICI']:
+				local_vars['CODICE'] = code[0]
+				if code[1]:
+					local_vars['REV'] = 'Rev.' + code[1]
+				else:
+					local_vars['REV'] = ''
+				pass
+
+				local_vars['RIGHECODICI'] += read_and_process_template('riga_codice.template', local_vars, repeating_vars)
+			pass
+			local_vars['RIGHECODICI'] = local_vars['RIGHECODICI'].rstrip('\n')
 
 			#
 			# Intestazione

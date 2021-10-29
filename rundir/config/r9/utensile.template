@@ -1,0 +1,16 @@
+;
+M2$NUMEROMOTORE$ S$VELOCITAROTAZIONEFRESA$$1:inizio_programma.template$
+;
+; ================================== M$NUMEROMOTORE$ $UTENSILE$ =====================================
+G90 G0 X$PRIMAX$ Y$PRIMAY$ A$PRIMAA$ B$PRIMAB$
+;
+L365=0
+L385=$LUNGHEZZAUTENSILE$
+L386=$NUMEROMOTORE$
+M141
+;
+(TCP,1)
+;
+G90 G0 X$PRIMAX$ Y$PRIMAY$
+;
+$COORDINATE$

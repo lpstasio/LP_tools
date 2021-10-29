@@ -1,6 +1,6 @@
 
 ;
-G79 G0 Z0
-G79 G0 Y-100
+G79 G0 Z$Z_zero$
+G91 G0 Y$Y_inizio_g91$
 ;
 (UIO,X$ORIGX$,Y$ORIGY$,Z$ORIGZ$)
