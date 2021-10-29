@@ -404,6 +404,11 @@ def load_config(is_maschera = False):
 				  replace(   's',  '%S')
 	config['formato_data'] = date_format
 
+	#
+	# Array separatori codice lapi
+	# ================================================================================================
+	config['separatore_codice_lapi'] = config['separatore_codice_lapi'].split(',')
+
 	return config
 pass
 
@@ -638,7 +643,14 @@ def load_program_info(filename, content, config, warning_text):
 		token = filename[start:end]
 
 		if token[0] == 'c':
-			lapi_separator = config.get('separatore_codice_lapi','@')
+			lapi_separator_list = config.get('separatore_codice_lapi',['@'])
+			lapi_separator = ''
+			for separator in lapi_separator_list:
+				if separator in token:
+					lapi_separator = separator
+				pass
+			pass
+
 			token     = token[2:]
 			rev_text  = ''
 			lapi_text = ''
@@ -678,12 +690,11 @@ def load_program_info(filename, content, config, warning_text):
 			token = token[2:]
 			nome_programma = token.strip().upper()
 
+			result['PROGRAMMA'] = nome_programma
 			if (len(nome_programma) != 7) and (len(nome_programma) != 8):
 				warning_text = ui_warn(warning_text, "Il nome '{}' è composto da {} caratteri".\
 									   format(result['PROGRAMMA'], len(result['PROGRAMMA'])))
 			pass
-
-			result['PROGRAMMA'] = nome_programma
 
 		#
 		# Robot e posizione dima
@@ -1140,10 +1151,10 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 				fout_content += template
 			pass
 			
-			#
-			# Preparazione testo utensili
-			# ================================================================================================
 			if local_vars.get('MASCHERA_TYPE', MASCHERA_NOMASCHERA) == MASCHERA_NOMASCHERA:
+				#
+				# Preparazione testo utensili
+				# ================================================================================================
 				ut_text = ''
 				for n_mot in range(3):
 					if utensili_utilizzati[n_mot] != None:
@@ -1156,29 +1167,29 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 				pass
 
 				ui_text += '(' + ut_text + ')'
-			pass
 
 
-			#
-			# Righe codici
-			# ================================================================================================
-			local_vars['RIGHECODICI'] = ''
-			if len(local_vars['all_CODICI']) == 0:
-				local_vars['all_CODICI'].append((local_vars['CODICE'], local_vars['CODICELAPI'], ''))
-			pass
-
-			for code in local_vars['all_CODICI']:
-				local_vars['CODICE']     = code[CODE_CODICE]
-				local_vars['CODICELAPI'] = code[CODE_LAPI]
-				if code[CODE_REV]:
-					local_vars['REV'] = 'Rev.' + code[CODE_REV]
-				else:
-					local_vars['REV'] = ''
+				#
+				# Righe codici
+				# ================================================================================================
+				local_vars['RIGHECODICI'] = ''
+				if len(local_vars['all_CODICI']) == 0:
+					local_vars['all_CODICI'].append((local_vars['CODICE'], local_vars['CODICELAPI'], ''))
 				pass
 
-				local_vars['RIGHECODICI'] += read_and_process_template('riga_codice.template', local_vars, repeating_vars)
+				for code in local_vars['all_CODICI']:
+					local_vars['CODICE']     = code[CODE_CODICE]
+					local_vars['CODICELAPI'] = code[CODE_LAPI]
+					if code[CODE_REV]:
+						local_vars['REV'] = 'Rev.' + code[CODE_REV]
+					else:
+						local_vars['REV'] = ''
+					pass
+
+					local_vars['RIGHECODICI'] += read_and_process_template('riga_codice.template', local_vars, repeating_vars)
+				pass
+				local_vars['RIGHECODICI'] = local_vars['RIGHECODICI'].rstrip('\n')
 			pass
-			local_vars['RIGHECODICI'] = local_vars['RIGHECODICI'].rstrip('\n')
 
 			#
 			# Intestazione
