@@ -1,6 +1,4 @@
 ;
-(TCP)
-;
 (UAO,0)
 ;
 G90 G0 Z$Z_zero$

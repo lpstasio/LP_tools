@@ -1,5 +1,5 @@
 # TEXporter
-_VERSION = 6
+_VERSION = 8
 
 from tex_defaults import *
 
@@ -360,7 +360,7 @@ def load_config(is_maschera = False):
 	path = 'configurazione.tex'
 	if is_maschera:
 		path = 'maschere/' + path
-	config = _parse_tex('configurazione.tex')
+	config = _parse_tex(path)
 
 	for key in config.keys():
 		if not key in default_config.keys():
@@ -897,6 +897,30 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 						pass
 
 						#
+						# Operazioni maschere
+						# ================================================================================================
+						if local_vars['MASCHERA_TYPE'] != MASCHERA_NOMASCHERA:
+							if local_vars['MASCHERA_DEPTH'] == MASCHERA_15MM:
+								#
+								# Sostituzione Z-5 per maschere numeri 15mm
+								# ================================================================================================
+								sub_z = ''
+								if local_vars['MASCHERA_TYPE'] == MASCHERA_BASE:
+									sub_z = config['maschera_15mm_base_sostituzione_z-5']
+								else:
+									sub_z = config['maschera_15mm_numeri_sostituzione_z-5']
+								pass
+
+								if sub_z and (sub_z != '-5'):
+									line = line.replace('Z-5', 'Z' + sub_z)
+								pass
+							pass
+
+							# Sosituzioni Z25 e F2000
+							line = line.replace('Z25.000', 'Z40F15000').replace('F2000','F3500')
+						pass
+
+						#
 						# Rimozione Nxx a inizio riga
 						# ================================================================================================
 						if line[0] == 'N':
@@ -937,23 +961,6 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 						if config['sostituisci_g00_g01']:
 							line = line.replace('G00', 'G0')
 							line = line.replace('G01', 'G1')
-						pass
-
-						#
-						# Sostituzione Z-5 per maschere numeri 15mm
-						# ================================================================================================
-						if (local_vars['MASCHERA_TYPE'] != MASCHERA_NOMASCHERA) and (local_vars['MASCHERA_DEPTH'] == MASCHERA_15MM):
-						#if config['sostituisci_g00_g01']:
-							sub_z = ''
-							if local_vars['MASCHERA_TYPE'] == MASCHERA_BASE:
-								sub_z = config['maschera_15mm_base_sostituzione_z-5']
-							else:
-								sub_z = config['maschera_15mm_numeri_sostituzione_z-5']
-							pass
-
-							if sub_z and (sub_z != '-5'):
-								line = line.replace('Z-5', 'Z' + sub_z)
-							pass
 						pass
 
 						#
@@ -1055,10 +1062,15 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 		pass
 
 		if (local_vars['MASCHERA_TYPE'] != MASCHERA_NOMASCHERA):
-			program_Zs.remove('100.000')
-			program_Zs.remove( '25.000')
-			program_Zs.remove( '10.000')
-			program_Zs.remove( '-5.000')
+			expected_Zs = ['100.000', '25.000', '10.000', '-5.000']
+			for zz in expected_Zs:
+				if zz in program_Zs:
+					program_Zs.remove(zz)
+				else:
+					warning_text = ui_warn(warning_text, 'Z' + zz + ' assente')
+				pass
+			pass
+
 			if len(program_Zs) > 0:
 				for z in program_Zs:
 					if not z:
