@@ -1,5 +1,5 @@
 # TEXporter
-_VERSION = 8
+_VERSION = 9
 
 from tex_defaults import *
 
@@ -20,6 +20,8 @@ from tex_defaults import *
 #   v5: "Attenzione:" e "Errore:"
 #   v6: Quasi tutte le informazioni sul programma sono lette dal nome dell'nc
 #   v7: Codice Lapi
+#   v8: Aggiunte sostituzioni per i programmi di taglio maschere
+#   v9: Fixati link col tcp off
 #
 # PLANNED
 #     add C axis support
@@ -874,6 +876,7 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 			line_index             =  0
 			current_section_index  = -1
 			link_lines             = []
+			tcp_lines              = []
 			is_reading_coordinates = False
 			while line_index < len(in_lines):
 				line = in_lines[line_index]
@@ -884,6 +887,7 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 				if is_reading_coordinates:
 					if in_str(line, MARK_SECTION_END):
 						is_reading_coordinates = False
+						tcp_lines = [line]
 					else:
 						#
 						# Ricerca Z (per maschere)
@@ -1014,8 +1018,24 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 						# ================================================================================================
 						nc_sections[current_section_index][NCSEC_COORDINATES].append(line)
 					pass
-				elif in_str(line, MARK_SECTION_START):
-					is_reading_coordinates = True
+				else:
+					tcp_lines.append(line)
+
+					if in_str(line, MARK_SECTION_START):
+						is_l385 = False
+						for tcp_line in tcp_lines:
+							if "L385" in tcp_line:
+								is_l385 = True
+								break
+							pass
+						pass
+
+						if not is_l385:
+							nc_sections[current_section_index][NCSEC_COORDINATES].extend(tcp_lines)
+						pass
+						tcp_lines = []
+						is_reading_coordinates = True
+					pass
 				pass
 
 				#
