@@ -23,6 +23,7 @@ from tex_defaults import *
 #   v8: Aggiunte sostituzioni per i programmi di taglio maschere
 #   v9: Fixati link col tcp off
 #  v10: Fix link con 'tcp off'-'tcp on' invertiti
+#       Quando un file nc ha un errore, viene saltato quel file anziché terminare l'esecuzione di tex.
 #
 # PLANNED
 #     add C axis support
@@ -58,6 +59,10 @@ from datetime import datetime
 WARNING_INTRODUCTION = ' [Attenzione: '
 templates_not_found = []
 
+class NC_Error_Exception(Exception):
+	""" Custom exception for errors in NC file."""
+pass
+
 def report_warning(ui_text, warning, filename = ''):
 	if ui_text:
 		ui_text += '\n'
@@ -80,14 +85,15 @@ pass
 def report_error_and_exit(ui_text, error, filename = ''):
 	report_error(ui_text, error, filename)
 
-	print("\n\nPremere invio per chiudere...", end='')
-	while True:
-		event = keyboard.read_event()
-		if (event.name == 'enter') and (event.event_type == 'up'):
-			break
-		pass
-	pass
-	exit() # @todo: maybe just skip current program?
+	#print("\n\nPremere invio per chiudere...", end='')
+	#while True:
+	#	event = keyboard.read_event()
+	#	if (event.name == 'enter') and (event.event_type == 'up'):
+	#		break
+	#	pass
+	#pass
+
+	raise NC_Error_Exception("NC error")
 pass
 
 def ui_warn(warning_text, warning):
@@ -1333,10 +1339,16 @@ if __name__ == '__main__':
 	for path in paths:
 		if not os.path.isdir(path):
 			filename = os.path.basename(path)
-			if not ('maschera' in filename.lower()):
-				process(filename, config_taglio, all_vars, origins,   max_filename_len, False)
-			else:
-				process(filename, config_maschera, all_vars, origins, max_filename_len, True)
+			try:
+				if not ('maschera' in filename.lower()):
+					process(filename, config_taglio, all_vars, origins,   max_filename_len, False)
+				else:
+					process(filename, config_maschera, all_vars, origins, max_filename_len, True)
+				pass
+			except NC_Error_Exception as exception:
+				if os.path.exists('out/' + filename):
+					os.remove('out/' + filename)
+				pass
 			pass
 		pass
 	pass
