@@ -22,6 +22,7 @@ from tex_defaults import *
 #   v7: Codice Lapi
 #   v8: Aggiunte sostituzioni per i programmi di taglio maschere
 #   v9: Fixati link col tcp off
+#  v10: Fix link con 'tcp off'-'tcp on' invertiti
 #
 # PLANNED
 #     add C axis support
@@ -878,6 +879,7 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 			link_lines             = []
 			tcp_lines              = []
 			is_reading_coordinates = False
+			has_program_started    = False
 			while line_index < len(in_lines):
 				line = in_lines[line_index]
 
@@ -885,9 +887,14 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 				# Lettura Coordinate
 				# ================================================================================================
 				if is_reading_coordinates:
-					if in_str(line, MARK_SECTION_END):
+					if in_str(line, MARK_SECTION_START):
+						# Proabile link col tcp off con "(TCP,1)" e "(TCP)" invertiti.
+						# (Da verificare con dei test approfonditi)
+
+						report_error_and_exit(ui_text, "Trovato un '(TCP,1)' non preceduto da un '(TCP)'")
+					elif in_str(line, MARK_SECTION_END):
 						is_reading_coordinates = False
-						tcp_lines = [line]
+						tcp_lines = []
 					else:
 						#
 						# Ricerca Z (per maschere)
@@ -1018,12 +1025,20 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 						# ================================================================================================
 						nc_sections[current_section_index][NCSEC_COORDINATES].append(line)
 					pass
-				else:
-					tcp_lines.append(line)
-
-					if in_str(line, MARK_SECTION_START):
+				elif has_program_started: # (is_reading_coordinates == False)
+					if not in_str(line, MARK_SECTION_START):
+						tcp_lines.append(line)
+					else:
 						is_l385 = False
 						for tcp_line in tcp_lines:
+
+							if in_str(tcp_line, MARK_SECTION_END):
+								# Proabile link col tcp off con "(TCP,1)" e "(TCP)" invertiti.
+								# (Da verificare con dei test approfonditi)
+
+								report_error_and_exit(ui_text, "Trovato un '(TCP)' senza un successivo '(TCP,1)'")
+							pass
+
 							if "L385" in tcp_line:
 								is_l385 = True
 								break
@@ -1031,10 +1046,18 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 						pass
 
 						if not is_l385:
+							nc_sections[current_section_index][NCSEC_COORDINATES].append("(TCP)")
 							nc_sections[current_section_index][NCSEC_COORDINATES].extend(tcp_lines)
+							nc_sections[current_section_index][NCSEC_COORDINATES].append("(TCP,1)")
 						pass
 						tcp_lines = []
 						is_reading_coordinates = True
+					pass
+				else:                # (is_reading_coordinates == False and has_program_started == False)
+					if in_str(line, MARK_SECTION_START):
+						tcp_lines = []
+						is_reading_coordinates = True
+						has_program_started = True
 					pass
 				pass
 
