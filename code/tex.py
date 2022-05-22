@@ -1,5 +1,5 @@
 # TEXporter
-_VERSION = 9
+_VERSION = 10
 
 from tex_defaults import *
 
@@ -85,13 +85,7 @@ pass
 def report_error_and_exit(ui_text, error, filename = ''):
 	report_error(ui_text, error, filename)
 
-	#print("\n\nPremere invio per chiudere...", end='')
-	#while True:
-	#	event = keyboard.read_event()
-	#	if (event.name == 'enter') and (event.event_type == 'up'):
-	#		break
-	#	pass
-	#pass
+	print("")
 
 	raise NC_Error_Exception("NC error")
 pass
@@ -897,7 +891,11 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 						# Proabile link col tcp off con "(TCP,1)" e "(TCP)" invertiti.
 						# (Da verificare con dei test approfonditi)
 
-						report_error_and_exit(ui_text, "Trovato un '(TCP,1)' non preceduto da un '(TCP)'")
+
+						error_msg = "Trovato un '(TCP,1)' non preceduto da un '(TCP)'"
+						if current_section_index >= 0:
+							error_msg += " nel programma per il motore " + nc_sections[current_section_index][NCSEC_MOTORE]
+						report_error_and_exit(ui_text, error_msg)
 					elif in_str(line, MARK_SECTION_END):
 						is_reading_coordinates = False
 						tcp_lines = []
@@ -1042,7 +1040,10 @@ def process(filename, config, all_vars, origins, ui_padding, is_maschera):
 								# Proabile link col tcp off con "(TCP,1)" e "(TCP)" invertiti.
 								# (Da verificare con dei test approfonditi)
 
-								report_error_and_exit(ui_text, "Trovato un '(TCP)' senza un successivo '(TCP,1)'")
+								error_msg = "Trovato un '(TCP)' senza un successivo '(TCP,1)'"
+								if current_section_index > 0:
+									error_msg += " nel programma per il motore " + nc_sections[current_section_index - 1][NCSEC_MOTORE]
+								report_error_and_exit(ui_text, error_msg)
 							pass
 
 							if "L385" in tcp_line:
